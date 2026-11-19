@@ -13,12 +13,13 @@ enum EntId {
   // fast (every 5 s)
   E_DEMAND,
   P_PLUG1, P_PLUG10 = P_PLUG1 + 9,           // plug power
-  S_TILE1, S_TILE4 = S_TILE1 + 3,            // the 4 Controls-page switches (the only ones the panel may toggle)
+  S_TILE1, S_TILE8 = S_TILE1 + 7,            // the Controls-page switches (the only ones the panel may toggle)
   S_ALERT,                                   // watched only, never switched
   E_COUNT
 };
 #define E_FIRST_FAST E_DEMAND
 #define NPLUGS 10
+#define NTILES 8
 
 struct EntVal {
   bool ok;              // got at least one good reading

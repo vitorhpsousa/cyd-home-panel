@@ -21,8 +21,8 @@ void cfgSetBrightness(uint8_t v);
 
 // names and links between entities (plug numbers are 1..10, 0 = none)
 const char *cfgPlugName(int i);        // i = 0..9, "" = unused
-const char *cfgTileName(int i);        // i = 0..3, "" = unused
-int cfgTilePlug(int i);                // i = 0..3
+const char *cfgTileName(int i);        // i = 0..NTILES-1 (8), "" = unused
+int cfgTilePlug(int i);                // i = 0..NTILES-1
 int cfgAlertPlug();
 
 // Entity IDs, indexed by EntId (ha.h). "" = not used.

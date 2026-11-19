@@ -31,11 +31,34 @@ void cfgSetBrightness(uint8_t v) {
 
 static const char *const PLUG_NAMES[10] = {PLUG1_NAME, PLUG2_NAME, PLUG3_NAME, PLUG4_NAME, PLUG5_NAME,
                                            PLUG6_NAME, PLUG7_NAME, PLUG8_NAME, PLUG9_NAME, PLUG10_NAME};
-static const char *const TILE_NAMES[4] = {TILE1_NAME, TILE2_NAME, TILE3_NAME, TILE4_NAME};
-static const int TILE_PLUGS[4] = {TILE1_PLUG, TILE2_PLUG, TILE3_PLUG, TILE4_PLUG};
+// TILE5..8 are optional in panel_settings.h (older copies stop at 4).
+#ifndef TILE5_NAME
+#define TILE5_NAME ""
+#define TILE5_SWITCH ""
+#define TILE5_PLUG 0
+#endif
+#ifndef TILE6_NAME
+#define TILE6_NAME ""
+#define TILE6_SWITCH ""
+#define TILE6_PLUG 0
+#endif
+#ifndef TILE7_NAME
+#define TILE7_NAME ""
+#define TILE7_SWITCH ""
+#define TILE7_PLUG 0
+#endif
+#ifndef TILE8_NAME
+#define TILE8_NAME ""
+#define TILE8_SWITCH ""
+#define TILE8_PLUG 0
+#endif
+static const char *const TILE_NAMES[NTILES] = {TILE1_NAME, TILE2_NAME, TILE3_NAME, TILE4_NAME,
+                                               TILE5_NAME, TILE6_NAME, TILE7_NAME, TILE8_NAME};
+static const int TILE_PLUGS[NTILES] = {TILE1_PLUG, TILE2_PLUG, TILE3_PLUG, TILE4_PLUG,
+                                       TILE5_PLUG, TILE6_PLUG, TILE7_PLUG, TILE8_PLUG};
 const char *cfgPlugName(int i) { return (i >= 0 && i < 10) ? PLUG_NAMES[i] : ""; }
-const char *cfgTileName(int i) { return (i >= 0 && i < 4) ? TILE_NAMES[i] : ""; }
-int cfgTilePlug(int i) { return (i >= 0 && i < 4) ? TILE_PLUGS[i] : 0; }
+const char *cfgTileName(int i) { return (i >= 0 && i < NTILES) ? TILE_NAMES[i] : ""; }
+int cfgTilePlug(int i) { return (i >= 0 && i < NTILES) ? TILE_PLUGS[i] : 0; }
 int cfgAlertPlug() { return ALERT_PLUG; }
 
 static const char *const IDS[E_COUNT] = {
@@ -47,6 +70,7 @@ static const char *const IDS[E_COUNT] = {
   PLUG1_POWER, PLUG2_POWER, PLUG3_POWER, PLUG4_POWER, PLUG5_POWER,
   PLUG6_POWER, PLUG7_POWER, PLUG8_POWER, PLUG9_POWER, PLUG10_POWER,
   TILE1_SWITCH, TILE2_SWITCH, TILE3_SWITCH, TILE4_SWITCH,
+  TILE5_SWITCH, TILE6_SWITCH, TILE7_SWITCH, TILE8_SWITCH,
   ALERT_SWITCH,
 };
 const char *cfgEntity(int e) { return (e >= 0 && e < E_COUNT) ? IDS[e] : ""; }

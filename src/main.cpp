@@ -37,7 +37,7 @@ static void showToast(const char *s) { strlcpy(toast, s, sizeof toast); toastUnt
 struct Tile { const char *name; int sw; int pw; };
 static Tile TILES[4];   // filled from config in setup()
 static void loadTiles() {
-  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};
+  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};   // UI branch shows all NTILES
 }
 static uint32_t pendingUntil[4] = {0};
 static char pendingFrom[4][8];

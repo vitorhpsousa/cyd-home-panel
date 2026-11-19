@@ -24,7 +24,7 @@ void haSnapshot(EntVal out[E_COUNT]) {
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
 
 void haToggle(int e) {
-  if (e < S_TILE1 || e > S_TILE4 || !*cfgEntity(e)) return;   // safety: only the 4 Controls-page switches can be toggled
+  if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return;   // safety: only the Controls-page switches can be toggled
   Cmd c = {CMD_TOGGLE, e, 0, 0}; xQueueSend(cmdQ, &c, 0);
 }
 void haBoost(float t, int m) {
