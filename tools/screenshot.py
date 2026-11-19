@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Grab the panel's canvas over USB serial -> PNG. Usage: screenshot.py PORT OUT.png [page-tap-x]"""
+"""Grab the panel's canvas over USB serial -> PNG. Usage: screenshot.py PORT OUT.png
+Saves OUT.png.raw (+ OUT.png.raw.size) and, if Pillow is available, OUT.png."""
 import sys, time, serial
 port, out = sys.argv[1], sys.argv[2]
 s = serial.Serial(port, 115200, timeout=5)
@@ -14,10 +15,11 @@ need = w * h * 2
 while len(data) < need: data += s.read(need - len(data))
 px = data[:need]
 open(out + '.raw', 'wb').write(px)
+open(out + '.raw.size', 'w').write(f'{w} {h}\n')   # for raw2png.py
 try:
     import PIL
 except ImportError:
-    print('raw saved', out + '.raw'); sys.exit(0)
+    print('raw saved', out + '.raw', w, h); sys.exit(0)
 from PIL import Image  # imported late: pyserial and Pillow may live in different Pythons
 im = Image.new('RGB', (w, h))
 im.putdata([(((v >> 11) & 31) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31)

@@ -19,5 +19,7 @@ extern const AAFont aaB17;
 extern const AAFont aaB20;
 extern const AAFont aaB24;
 extern const AAFont aaB30;
+extern const AAFont aaB36;
 extern const AAFont aaB44;
+extern const AAFont aaB80;
 extern const AAFont aaB100;
