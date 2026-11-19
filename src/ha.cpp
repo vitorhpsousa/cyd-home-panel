@@ -12,10 +12,15 @@ static SemaphoreHandle_t mtx;
 static volatile uint32_t lastOkMs = 0;
 static volatile bool lastOk = false;
 
-enum CmdType { CMD_NONE, CMD_SWITCH, CMD_BOOST, CMD_BOOST_OFF };
-struct Cmd { CmdType t; int ent; float temp; int minutes; bool on; uint32_t atMs; };
-#define CMD_MAX_AGE_MS 5000   // a command that waited longer (e.g. Wi-Fi was down) is dropped, never run late
-static QueueHandle_t cmdQ;
+// Service calls run in their own short-lived task each, with their own HTTP connection: HA only
+// answers a Bluetooth relay command when the relay has responded (5-40 s), and that must not hold up
+// other commands or the polling. While a command is in flight its entity is re-read every second.
+enum CmdType { CMD_SWITCH, CMD_BOOST, CMD_BOOST_OFF };
+struct Cmd { CmdType t; int ent; float temp; int minutes; bool on; };
+#define MAX_INFLIGHT 4
+static SemaphoreHandle_t slots;                  // counting semaphore: commands in flight
+static volatile bool inflight[E_COUNT];          // one command per entity at a time
+static volatile uint32_t watchUntil[E_COUNT];    // re-read this entity every second until then
 
 void haSnapshot(EntVal out[E_COUNT]) {
   xSemaphoreTake(mtx, portMAX_DELAY);
@@ -24,17 +29,18 @@ void haSnapshot(EntVal out[E_COUNT]) {
 }
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
 
-void haSet(int e, bool on) {
-  if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return;   // safety: only the Controls-page switches can be switched
-  Cmd c = {CMD_SWITCH, e, 0, 0, on, millis()}; xQueueSend(cmdQ, &c, 0);
+static bool startCmd(const Cmd &c);
+bool haSet(int e, bool on) {
+  if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return false;   // safety: only the Controls-page switches
+  return startCmd({CMD_SWITCH, e, 0, 0, on});
 }
 void haBoost(float t, int m) {
   if (!HIVE_BOOST || !*cfgEntity(E_CLIMATE)) return;
-  Cmd c = {CMD_BOOST, E_CLIMATE, t, m, true, millis()}; xQueueSend(cmdQ, &c, 0);
+  startCmd({CMD_BOOST, E_CLIMATE, t, m, true});
 }
 void haBoostOff() {
   if (!HIVE_BOOST || !*cfgEntity(E_CLIMATE)) return;
-  Cmd c = {CMD_BOOST_OFF, E_CLIMATE, 0, 0, false, millis()}; xQueueSend(cmdQ, &c, 0);
+  startCmd({CMD_BOOST_OFF, E_CLIMATE, 0, 0, false});
 }
 
 // "2026-11-19T13:00:00+00:00" -> UTC epoch
@@ -100,44 +106,70 @@ static bool fetch(int e) {
   return true;
 }
 
-static bool post(const char *path, const String &body) {
-  http.begin(client, cfgHaHost(), cfgHaPort(), path);
-  http.addHeader("Authorization", String("Bearer ") + cfgHaToken());
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(20000);   // SwitchBot relays answer over Bluetooth and can take 5-15 s
-  int code = http.POST(body);
-  http.end();
-  http.setTimeout(4000);
-  Serial.printf("HA POST %s %s -> %d\n", path, body.c_str(), code);
-  return code == 200;
-}
-
-static void runCmd(const Cmd &c) {
-  if (millis() - c.atMs > CMD_MAX_AGE_MS) { Serial.printf("HA: dropped a stale command for %s\n", cfgEntity(c.ent)); return; }
+static void cmdTask(void *arg) {
+  Cmd c = *(Cmd *)arg;
+  delete (Cmd *)arg;
+  String path, body;
   if (c.t == CMD_SWITCH) {
     // turn_on/turn_off with the state the user saw, never "toggle": a repeat can't undo the first one
-    post(c.on ? "/api/services/switch/turn_on" : "/api/services/switch/turn_off",
-         String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}");
+    path = c.on ? "/api/services/switch/turn_on" : "/api/services/switch/turn_off";
+    body = String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}";
   } else if (c.t == CMD_BOOST) {
     char b[200];
     snprintf(b, sizeof b, "{\"entity_id\":\"%s\",\"time_period\":\"%02d:%02d:00\",\"temperature\":%.1f}",
              cfgEntity(E_CLIMATE), c.minutes / 60, c.minutes % 60, c.temp);
-    post("/api/services/hive/boost_heating_on", b);
-  } else if (c.t == CMD_BOOST_OFF) {
-    post("/api/services/hive/boost_heating_off", String("{\"entity_id\":\"") + cfgEntity(E_CLIMATE) + "\"}");
+    path = "/api/services/hive/boost_heating_on"; body = b;
+  } else {
+    path = "/api/services/hive/boost_heating_off";
+    body = String("{\"entity_id\":\"") + cfgEntity(E_CLIMATE) + "\"}";
   }
-  delay(400);   // let the integration report back
-  fetch(c.ent);
+  {
+    WiFiClient cl;
+    HTTPClient h;
+    h.begin(cl, cfgHaHost(), cfgHaPort(), path);
+    h.addHeader("Authorization", String("Bearer ") + cfgHaToken());
+    h.addHeader("Content-Type", "application/json");
+    h.setTimeout(45000);   // HA answers when the device has: Bluetooth relays can take 5-40 s
+    uint32_t t0 = millis();
+    int code = h.POST(body);
+    h.end();
+    Serial.printf("HA POST %s %s -> %d (%lu ms)\n", path.c_str(), cfgEntity(c.ent), code, (unsigned long)(millis() - t0));
+  }
+  watchUntil[c.ent] = millis() + 5000;   // a few more quick reads to catch the final state
+  inflight[c.ent] = false;
+  xSemaphoreGive(slots);
+  vTaskDelete(nullptr);
+}
+
+// Starts a command now, or drops it (offline, too many in flight, or one already running for that
+// entity): a tap is never queued to run later.
+static bool startCmd(const Cmd &c) {
+  if (WiFi.status() != WL_CONNECTED || !haOnline() || inflight[c.ent]) return false;
+  if (xSemaphoreTake(slots, 0) != pdTRUE) return false;
+  inflight[c.ent] = true;
+  watchUntil[c.ent] = millis() + 60000;
+  Cmd *p = new Cmd(c);
+  if (xTaskCreatePinnedToCore(cmdTask, "hacmd", 6144, p, 1, nullptr, 0) != pdPASS) {
+    delete p; inflight[c.ent] = false; watchUntil[c.ent] = 0; xSemaphoreGive(slots);
+    return false;
+  }
+  return true;
 }
 
 static void task(void *) {
   uint32_t lastFast = 0, lastSlow = 0;
   bool first = true;
   for (;;) {
-    if (WiFi.status() != WL_CONNECTED) { lastOk = false; xQueueReset(cmdQ); delay(500); continue; }   // never run taps late
-    Cmd c;
-    while (xQueueReceive(cmdQ, &c, 0) == pdTRUE) runCmd(c);
+    if (WiFi.status() != WL_CONNECTED) { lastOk = false; delay(500); continue; }
     uint32_t now = millis();
+    // entities with a command in flight (or just finished): re-read every second
+    static uint32_t lastWatch = 0;
+    if (now - lastWatch >= 1000) {
+      lastWatch = now;
+      for (int e = 0; e < E_COUNT; e++)
+        if (watchUntil[e] && (int32_t)(watchUntil[e] - now) > 0) fetch(e);
+        else watchUntil[e] = 0;
+    }
     bool doSlow = first || now - lastSlow >= 30000;
     bool doFast = doSlow || now - lastFast >= 5000;
     if (doFast) {
@@ -145,7 +177,6 @@ static void task(void *) {
       for (int e = doSlow ? 0 : E_FIRST_FAST; e < E_COUNT; e++) {
         tried++;
         if (fetch(e)) okCount++;
-        if (xQueueReceive(cmdQ, &c, 0) == pdTRUE) runCmd(c);   // keep taps snappy mid-sweep
       }
       lastOk = okCount > 0;
       if (lastOk) lastOkMs = millis();
@@ -160,7 +191,7 @@ static void task(void *) {
 
 void haBegin() {
   mtx = xSemaphoreCreateMutex();
-  cmdQ = xQueueCreate(8, sizeof(Cmd));
+  slots = xSemaphoreCreateCounting(MAX_INFLIGHT, MAX_INFLIGHT);
   http.setReuse(true);
   http.setTimeout(4000);
   xTaskCreatePinnedToCore(task, "ha", 12288, nullptr, 1, nullptr, 0);

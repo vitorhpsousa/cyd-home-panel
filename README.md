@@ -72,6 +72,8 @@ never uploaded if you share your copy of this project. The [setup guide](docs/se
   fridge, freezer or anything else that must stay on there.
 - A tap is sent as "turn on" or "turn off" for the state you saw. If Home Assistant is unreachable, the tap is dropped,
   never sent minutes later.
+- Switches show their new state straight away (like the Home Assistant app) and each command is sent on its own, so a
+  slow Bluetooth relay never holds up the other switches.
 - The alert entity is only watched, never switched.
 - The access token lets the panel control Home Assistant. For extra safety you can create a separate, non-admin Home
   Assistant user just for the panel and make the token from that user ([guide, step 4](docs/setup-guide.md#4-get-the-details-from-home-assistant)).

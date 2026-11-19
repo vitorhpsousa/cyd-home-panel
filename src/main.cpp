@@ -26,7 +26,7 @@ bool dimmed = false;
 static void loadTiles() {
   for (int i = 0; i < NTILES; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};
 }
-static char pendingFrom[NTILES][8];
+char pendingFrom[NTILES][8];
 
 void uiApplyBacklight() { boardSetBacklight(dimmed ? BL_NIGHT : cfgBrightness()); }
 
@@ -59,8 +59,12 @@ static void controlsRowTapped(int i, uint32_t ms) {
   }
   guard.confirmRow = -1;
   strlcpy(pendingFrom[i], ev[e].s, sizeof pendingFrom[i]);
-  pendingUntil[i] = ms + 20000;
-  haSet(e, !on);   // the state the user saw, flipped
+  if (!haSet(e, !on)) {   // offline, or a command for it is still running: say so, don't queue it
+    showToast(haOnline() ? "Still sending - try again in a moment" : "Home Assistant offline - not sent");
+    audioBeep(400, 80, 25);
+    return;
+  }
+  pendingUntil[i] = ms + 45000;   // shown as switched straight away; cleared when HA reports the new state
   audioBeep(1200, 25, 25);
 }
 
@@ -101,7 +105,7 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
   } else if (te.type == TouchEvent::TAP && page == CONTROLS) {
     // edge taps were handled above, so they never reach a row or the bar
     if (controlsBarRect().hit(te.x, te.y)) {
-      if (controlsUnlocked()) lockControls(); else { guard.unlockedUntil = ms + UNLOCK_MS; guard.confirmRow = -1; }
+      guard.unlockedUntil = ms + UNLOCK_MS;   // the bar only unlocks (a double tap must not re-lock); it locks by itself
       audioBeep(1000, 25, 20);
     } else {
       for (int i = 0; i < NTILES; i++)

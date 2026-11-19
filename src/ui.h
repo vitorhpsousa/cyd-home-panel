@@ -50,6 +50,7 @@ Rect boostButtonRect(bool start); // its [Start boost] / [Cancel] buttons
 struct Tile { const char *name; int sw; int pw; };
 extern Tile TILES[NTILES];
 extern uint32_t pendingUntil[NTILES];
+extern char pendingFrom[NTILES][8];   // state when tapped; while pending the row shows the opposite
 
 // ---- protection against accidental touches (state kept by main.cpp, drawn by ui_pages.cpp) ----
 // The Controls page opens locked; a tap on the bar unlocks it for 25 s (each switch action restarts

@@ -47,13 +47,13 @@ Tips:
 | `src/settings_check.h` | Includes `panel_settings.h`, or stops the build with a plain-English message. |
 | `src/config.h`, `src/config.cpp` | Reads every setting for the rest of the code (`cfgEntity(EntId)`, `cfgPlugName`, `cfgTileName`, …) from `panel_settings.h`. Rotation and brightness are saved on the board (NVS). |
 | `src/net.*` | Joins the Wi-Fi and rejoins if it drops. |
-| `src/ha.h`, `src/ha.cpp` | Home Assistant client. A background FreeRTOS task on core 0 polls each entity with `GET /api/states/<id>` (fast group every 5 s, slow group every 30 s), with a filtered ArduinoJson parse (state plus a few attributes). It runs queued service calls: `switch/turn_on`/`turn_off` via `haSet()`, and `hive/boost_heating_*`. Commands that waited more than 5 s are dropped. `EntId` lists every entity in order. |
+| `src/ha.h`, `src/ha.cpp` | Home Assistant client. A background FreeRTOS task on core 0 polls each entity with `GET /api/states/<id>` (fast group every 5 s, slow group every 30 s), with a filtered ArduinoJson parse (state plus a few attributes). Service calls (`switch/turn_on`/`turn_off` via `haSet()`, `hive/boost_heating_*`) each run in their own short task with their own connection, so a slow Bluetooth device (HA answers only when it has, 5–40 s) never blocks other commands or polling; nothing is queued to run later, and an entity with a command in flight is re-read every second. `EntId` lists every entity in order. |
 | `src/main.cpp` | Setup and the main loop: touch handling (edge taps, swipes, unlock, confirm, long presses), night dimming, the rate LED, the peak chime and the "appliance stopped" alert. Redraws at most once a second from a snapshot of HA values. |
 | `src/ui.h` | Shared UI state, palette and layout helpers: `EDGE` (side tap strips), `contentL/R/W/Bottom()`, the tap areas (`titleRect`, `heatingRect`, `tileRect`, `controlsBarRect`, …) and the accidental-touch guard (`UiGuard`: unlock 25 s, confirm-off 3 s, boost confirm 8 s). |
 | `src/ui_pages.cpp` | Draws the status bar, page dots and the three pages, each with a landscape and a portrait layout, plus overlays (toast, alert banner, boost confirm). |
 | `src/ui_menu.cpp` | The hidden menu (hold the page name): Rotate, Brightness, System info. |
 | `src/board.*` | Display (ST77922 over QSPI), backlight and touch. Rotation is set at run time (`boardSetRotation(0..3)`: 0/2 portrait 320x480, 1/3 landscape 480x320); there is one PSRAM canvas per shape and `boardPresent()` rotates it onto the panel. `UI_W`/`UI_H` give the current size. |
-| `src/touch.*` | Turns raw touches into tap (60–600 ms, moved ≤ 20 px), long press (0.7 s, stayed within 20 px) and swipe left/right. |
+| `src/touch.*` | Turns raw touches into tap (20–600 ms, moved ≤ 20 px), long press (0.7 s, stayed within 20 px) and swipe left/right. |
 | `src/aatext.*`, `src/fonts_aa.*` | Anti-aliased text. `fonts_aa.*` are **generated** by `tools/gen_fonts.py`. |
 | `src/alert_audio.*` | Speaker (ES8311 codec over I2S): beeps and two chimes (`PEAK_CHIME`, `APPLIANCE_ALERT`). |
 | `tools/screenshot.py`, `tools/raw2png.py` | Save the screen over USB as a PNG. |

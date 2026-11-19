@@ -3,7 +3,7 @@
 
 static const uint32_t POLL_MS = 20;          // ~50 Hz
 static const uint32_t LONG_MS = 700;         // held still this long = long press
-static const uint32_t TAP_MIN_MS = 60;       // shorter = a one-sample ghost blip, ignored
+static const uint32_t TAP_MIN_MS = 20;       // a single 20 ms reading = ghost blip, ignored (quick real taps are ~40 ms)
 static const uint32_t TAP_MAX_MS = 600;
 static const uint32_t UP_DEBOUNCE_MS = 60;   // finger absent this long = released
 static const int STILL_MAX = 20;             // tap / long press: never further than this from touch-down

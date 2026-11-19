@@ -418,8 +418,8 @@ void drawControls() {
     if (!*t.name) continue;   // unused switch
     Rect r = tileRect(i);
     bool known = ev[t.sw].ok && ev[t.sw].avail;
-    bool on = isOn(t.sw);
     bool pending = millis() < pendingUntil[i];
+    bool on = pending ? strcmp(pendingFrom[i], "on") != 0 : isOn(t.sw);   // like the HA app: show it switched at once
     bool confirm = confirmLive && guard.confirmRow == i;
     cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, confirm ? rgb(120, 28, 28) : fade(on ? CARD_HI : CARD));
     if (pending) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, fade(TXT)); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, fade(TXT)); }
