@@ -24,9 +24,9 @@ bool dimmed = false;
 // Settings use plug numbers 1-10 (0 = none); the code uses entity indexes.
 #define PLUG_ENT(n) ((n) >= 1 && (n) <= NPLUGS ? P_PLUG1 + (n) - 1 : -1)
 static void loadTiles() {
-  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};   // UI branch shows all NTILES
+  for (int i = 0; i < NTILES; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};
 }
-static char pendingFrom[4][8];
+static char pendingFrom[NTILES][8];
 
 void uiApplyBacklight() { boardSetBacklight(dimmed ? BL_NIGHT : cfgBrightness()); }
 
@@ -39,6 +39,17 @@ static bool tankFull() {
   if (num(pw) >= ALERT_WATTS) { dehumLowSince = 0; return false; }
   if (!dehumLowSince) dehumLowSince = millis();
   return millis() - dehumLowSince >= ALERT_MS;
+}
+
+// ---- switching ----
+// The ONE path from a tap on a Controls row to haToggle(). Any protection against accidental
+// switching (unlock / confirm) belongs here. haToggle() itself refuses anything but S_TILE1..8.
+static void controlsRowTapped(int i, uint32_t ms) {
+  if (ms < pendingUntil[i]) return;   // still waiting for the last command
+  strlcpy(pendingFrom[i], ev[TILES[i].sw].s, sizeof pendingFrom[i]);
+  pendingUntil[i] = ms + 20000;
+  haToggle(TILES[i].sw);
+  audioBeep(1200, 25, 25);
 }
 
 // ---- touch ----
@@ -56,14 +67,9 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
   } else if (te.type == TouchEvent::SWIPE_RIGHT || (te.type == TouchEvent::TAP && te.x < EDGE)) {
     page = (page + NPAGES - 1) % NPAGES;
   } else if (te.type == TouchEvent::TAP && page == CONTROLS) {
-    for (int i = 0; i < 4; i++) {
-      if (*TILES[i].name && tileRect(i).hit(te.x, te.y) && ms >= pendingUntil[i]) {
-        strlcpy(pendingFrom[i], ev[TILES[i].sw].s, sizeof pendingFrom[i]);
-        pendingUntil[i] = ms + 20000;
-        haToggle(TILES[i].sw);
-        audioBeep(1200, 25, 25);
-      }
-    }
+    // edge taps were handled above, so they never reach a row
+    for (int i = 0; i < NTILES; i++)
+      if (*TILES[i].name && tileRect(i).hit(te.x, te.y)) controlsRowTapped(i, ms);
   } else if (te.type == TouchEvent::LONG && HIVE_BOOST && page == HOME && heatingRect().hit(te.x, te.y)) {
     const EntVal &c = ev[E_CLIMATE];
     if (!strcmp(c.preset, "boost")) { haBoostOff(); showToast("Stopping boost"); }
@@ -146,7 +152,7 @@ void loop() {
   haSnapshot(ev);
 
   // pending tiles clear when the state flips
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < NTILES; i++)
     if (pendingUntil[i] && strcmp(pendingFrom[i], ev[TILES[i].sw].s)) pendingUntil[i] = 0;
 
   // rate LED + peak chime

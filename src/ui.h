@@ -38,14 +38,15 @@ inline int contentL() { return 10; }
 inline int contentR() { return UI_W - 10; }
 inline int contentW() { return contentR() - contentL(); }
 inline int contentBottom() { return UI_H - DOTS_H; }
+constexpr int CONTROLS_FOOT_H = 46;   // kept free under the Controls rows (room for a lock / confirm bar)
 Rect titleRect();                 // page name in the status bar: long press opens the menu
 Rect heatingRect();               // Home heating card: long press = Hive boost
-Rect tileRect(int i);             // Controls tiles 0..3
+Rect tileRect(int i);             // Controls row for switch i (0..NTILES-1); w = 0 if unused
 
 // ---- control tiles ----
 struct Tile { const char *name; int sw; int pw; };
-extern Tile TILES[4];
-extern uint32_t pendingUntil[4];
+extern Tile TILES[NTILES];
+extern uint32_t pendingUntil[NTILES];
 
 // ---- helpers ----
 bool isOn(int e);

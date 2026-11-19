@@ -7,8 +7,8 @@
 
 int page = HOME;
 const char *const PAGE_NAMES[NPAGES] = {"Home", "Energy", "Controls"};
-Tile TILES[4];
-uint32_t pendingUntil[4] = {0};
+Tile TILES[NTILES];
+uint32_t pendingUntil[NTILES] = {0};
 
 static char toast[64] = "";
 static uint32_t toastUntil = 0;
@@ -71,10 +71,19 @@ static Rect homeCard(int i) {   // 0 inside, 1 outside, 2 heating, 3 today (port
 }
 Rect heatingRect() { return homeCard(2); }
 
+// Controls: one compact row per switch that has a name, packed without gaps. Portrait = one column
+// of up to 8 rows; landscape = 2 columns x 4 rows (filled top to bottom, then the right column).
+static int tileCount() { int n = 0; for (int i = 0; i < NTILES; i++) if (*TILES[i].name) n++; return n; }
 Rect tileRect(int i) {
-  const int top = STATUS_H + 4, gap = 10;
-  const int w = (contentW() - gap) / 2, h = (contentBottom() - 4 - top - gap) / 2;
-  return {contentL() + (i % 2) * (w + gap), top + (i / 2) * (h + gap), w, h};
+  if (i < 0 || i >= NTILES || !*TILES[i].name) return {0, 0, 0, 0};
+  int slot = 0;
+  for (int j = 0; j < i; j++) if (*TILES[j].name) slot++;
+  const int n = tileCount(), top = STATUS_H + 4, bottom = contentBottom() - CONTROLS_FOOT_H, gap = 4, colGap = 10;
+  const int cols = boardPortrait() ? 1 : 2, perCol = boardPortrait() ? NTILES : 4;
+  const int rows = min(n, perCol);
+  const int h = min(56, (bottom - top - gap * (rows - 1)) / max(rows, 1));
+  const int w = (contentW() - colGap * (cols - 1)) / cols;
+  return {contentL() + (slot / perCol) * (w + colGap), top + (slot % perCol) * (h + gap), w, h};
 }
 
 // ---- chrome ----
@@ -320,60 +329,48 @@ void drawEnergy(time_t now) {
 }
 
 // ---- Controls ----
-// Splits a name over two lines at a space when it does not fit on one. Returns the font used.
-static const AAFont &wrapName(const char *name, int maxW, char *l1, char *l2, size_t n) {
-  static const AAFont *const F[] = {&aaB24, &aaB20};
-  for (const AAFont *f : F) {
-    strlcpy(l1, name, n); l2[0] = 0;
-    if (aaMeasure(*f, l1) <= maxW) return *f;
-    for (int i = strlen(name) - 1; i > 0; i--) {
-      if (name[i] != ' ') continue;
-      strlcpy(l1, name, min((size_t)i + 1, n));
-      strlcpy(l2, name + i + 1, n);
-      if (aaMeasure(*f, l1) <= maxW && aaMeasure(*f, l2) <= maxW) return *f;
-    }
-  }
-  // no clean split: second line gets the rest, cut with "…"
-  fitText(l2[0] ? l2 : l1, n, aaB20, maxW);
-  fitText(l1, n, aaB20, maxW);
-  return aaB20;
+static void toggleSwitch(int x, int y, bool on, bool known, bool pending) {
+  const int w = 52, h = 28, r = h / 2;
+  if (!known) { cv->drawRoundRect(x, y, w, h, r, FAINT); cv->drawRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, FAINT); return; }
+  cv->fillRoundRect(x, y, w, h, r, on ? ONFILL : rgb(58, 68, 86));
+  const int kx = on ? x + w - r : x + r;
+  cv->fillCircle(kx, y + r, r - 4, pending ? DIM : on ? TXT : rgb(170, 180, 196));
 }
 
 void drawControls() {
-  char b[32];
-  const bool port = boardPortrait();
-  for (int i = 0; i < 4; i++) {
-    Rect r = tileRect(i);
+  char b[40];
+  for (int i = 0; i < NTILES; i++) {
     const Tile &t = TILES[i];
-    if (!*t.name) continue;   // unused button
+    if (!*t.name) continue;   // unused switch
+    Rect r = tileRect(i);
     bool known = ev[t.sw].ok && ev[t.sw].avail;
     bool on = isOn(t.sw);
     bool pending = millis() < pendingUntil[i];
-    card(r, on ? ONFILL : CARD);
+    card(r, on ? CARD_HI : CARD);
     if (pending) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, TXT); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, TXT); }
-    uint16_t fg = on ? BG : TXT, dim = on ? rgb(90, 60, 10) : DIM;
-    const char *st = !known ? "Unavailable" : on ? "ON" : "OFF";
-    float wv = num(t.pw);
-    const char *hint = pending ? "sending..." : "tap to switch";
-    if (!port) {
-      char nm[40]; strlcpy(nm, t.name, sizeof nm);
-      fitText(nm, sizeof nm, aaB24, r.w - 28);
-      aaDraw(cv, r.x + 14, r.y + 10, nm, aaB24, fg);
-      aaDraw(cv, r.x + 14, r.y + 46, st, aaB30, known ? fg : RED);
-      if (!isnan(wv)) { fmtPower(b, sizeof b, wv); aaDrawRight(cv, r.x + r.w - 14, r.y + r.h - 28, b, aaR17, dim); }
-      aaDraw(cv, r.x + 14, r.y + r.h - 26, hint, aaR14, dim);
-    } else {
-      // tall narrow tile: name (up to 2 lines), big state, watts, hint
-      char l1[40], l2[40];
-      const AAFont &nf = wrapName(t.name, r.w - 22, l1, l2, sizeof l1);
-      aaDraw(cv, r.x + 11, r.y + 12, l1, nf, fg);
-      if (l2[0]) aaDraw(cv, r.x + 11, r.y + 12 + nf.height, l2, nf, fg);
-      static const AAFont *const SF[] = {&aaB36, &aaB20, &aaB17};
-      aaDraw(cv, r.x + 11, r.y + r.h / 2 - 6, st, aaFit(st, r.w - 20, SF, 3), known ? fg : RED);
-      if (!isnan(wv)) { fmtPower(b, sizeof b, wv); aaDraw(cv, r.x + 12, r.y + r.h - 52, b, aaR20, dim); }
-      aaDraw(cv, r.x + 12, r.y + r.h - 26, hint, aaR14, dim);
+    const int sx = r.x + r.w - 14 - 52;
+    toggleSwitch(sx, r.y + (r.h - 28) / 2, on, known, pending);
+    // name, with the watts / status line under it (or beside it when the row is short)
+    const int nx = r.x + 14, room = sx - 12 - nx;
+    char nm[40]; strlcpy(nm, t.name, sizeof nm);
+    fitText(nm, sizeof nm, aaB20, room);
+    const char *sub = nullptr;
+    uint16_t subCol = DIM;
+    if (pending) sub = "sending...";
+    else if (!known) { sub = "Unavailable"; subCol = RED; }
+    else { float wv = num(t.pw); if (!isnan(wv)) { fmtPower(b, sizeof b, wv); sub = b; } }
+    if (sub && r.h >= 46) {
+      const int top = r.y + (r.h - 24 - 17) / 2;
+      aaDraw(cv, nx, top, nm, aaB20, TXT);
+      aaDraw(cv, nx, top + 23, sub, aaR14, subCol);
+    } else {   // short row: status to the left of the switch, name gets the rest
+      int sw = sub ? aaDrawRight(cv, sx - 12, r.y + (r.h - 17) / 2 + 1, sub, aaR14, subCol) + 10 : 0;
+      strlcpy(nm, t.name, sizeof nm);
+      fitText(nm, sizeof nm, aaB20, room - sw);
+      aaDraw(cv, nx, r.y + (r.h - 24) / 2, nm, aaB20, TXT);
     }
   }
+  if (!tileCount()) aaDrawCentered(cv, UI_W / 2, UI_H / 2 - 12, "No switches set up", aaR20, DIM);
 }
 
 // ---- banners ----
