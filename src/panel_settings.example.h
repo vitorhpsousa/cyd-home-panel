@@ -2,9 +2,17 @@
 // =====================================================================================
 //  YOUR SETTINGS
 //  1. Make a copy of this file in the same folder and call the copy  panel_settings.h
-//  2. Fill in the copy. Only change the text between the "quotes" and the numbers.
+//     (the build needs that file, even if you don't change anything in it).
+//  2. Filling it in is OPTIONAL. You can instead enter everything from your phone on the
+//     panel's setup page: the panel opens a "CYD-Panel-XXXX" Wi-Fi hotspot by itself when
+//     no Wi-Fi is set (or start it from the hidden menu -> Setup hotspot), and shows the
+//     hotspot password on screen. Anything saved on the setup page wins over this file;
+//     anything you never saved there comes from this file.
+//     If you do fill it in: only change the text between the "quotes" and the numbers.
+//     Leave WIFI_SSID "" if you want the setup hotspot to start on the first boot.
 //  panel_settings.h is never uploaded to GitHub (it is listed in .gitignore), so your
 //  Wi-Fi password and Home Assistant token stay on your computer.
+//  Clock, prices, HIVE_BOOST, ALERT_WATTS/MINUTES/TEXT are only set here (not on the page).
 // =====================================================================================
 
 // ---- Wi-Fi (the panel only works on 2.4 GHz Wi-Fi) ----------------------------------
