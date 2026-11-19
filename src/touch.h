@@ -3,7 +3,7 @@
 
 struct TouchEvent {
   enum Type { NONE, TAP, LONG, SWIPE_LEFT, SWIPE_RIGHT } type;
-  int16_t x, y;  // touch-down point (canvas coordinates, 480x320 landscape)
+  int16_t x, y;  // touch-down point (canvas coordinates for the current rotation)
 };
 
 bool touchBegin();               // board touch is set up by boardInit(); this only resets the state machine

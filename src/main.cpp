@@ -8,9 +8,10 @@
 #include "alert_audio.h"
 #include "ha.h"
 #include "settings_check.h"
+#include "config.h"
+#include "net.h"
 
 #define LED_PIN 40
-#define BL_DAY 255
 #define BL_NIGHT 18
 #define ALERT_MS ((uint32_t)ALERT_MINUTES * 60 * 1000)
 
@@ -34,14 +35,10 @@ static void showToast(const char *s) { strlcpy(toast, s, sizeof toast); toastUnt
 // Settings use plug numbers 1-10 (0 = none); the code uses entity indexes.
 #define PLUG_ENT(n) ((n) >= 1 && (n) <= NPLUGS ? P_PLUG1 + (n) - 1 : -1)
 struct Tile { const char *name; int sw; int pw; };
-static const Tile TILES[4] = {
-  {TILE1_NAME, S_TILE1, PLUG_ENT(TILE1_PLUG)}, {TILE2_NAME, S_TILE1 + 1, PLUG_ENT(TILE2_PLUG)},
-  {TILE3_NAME, S_TILE1 + 2, PLUG_ENT(TILE3_PLUG)}, {TILE4_NAME, S_TILE1 + 3, PLUG_ENT(TILE4_PLUG)},
-};
-static const char *const PLUG_NAMES[NPLUGS] = {
-  PLUG1_NAME, PLUG2_NAME, PLUG3_NAME, PLUG4_NAME, PLUG5_NAME,
-  PLUG6_NAME, PLUG7_NAME, PLUG8_NAME, PLUG9_NAME, PLUG10_NAME,
-};
+static Tile TILES[4];   // filled from config in setup()
+static void loadTiles() {
+  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};
+}
 static uint32_t pendingUntil[4] = {0};
 static char pendingFrom[4][8];
 
@@ -180,7 +177,7 @@ static void drawEnergy(time_t now) {
   struct P { const char *n; int pw; int cost; } ps[NPLUGS];
   int N = 0;
   for (int i = 0; i < NPLUGS; i++)
-    if (*PLUG_NAMES[i]) ps[N++] = {PLUG_NAMES[i], P_PLUG1 + i, *haEntityId(C_PLUG1 + i) ? C_PLUG1 + i : -1};
+    if (*cfgPlugName(i)) ps[N++] = {cfgPlugName(i), P_PLUG1 + i, *haEntityId(C_PLUG1 + i) ? C_PLUG1 + i : -1};
   for (int i = 1; i < N; i++)
     for (int j = i; j > 0; j--) {
       float a = num(ps[j].pw), bb = num(ps[j - 1].pw);
@@ -240,7 +237,7 @@ static void drawControls() {
 static uint32_t dehumLowSince = 0;
 static bool tankAlerted = false;
 static bool tankFull() {
-  const int pw = PLUG_ENT(ALERT_PLUG);
+  const int pw = PLUG_ENT(cfgAlertPlug());
   if (!isOn(S_ALERT) || isnan(num(pw))) { dehumLowSince = 0; return false; }
   if (num(pw) >= ALERT_WATTS) { dehumLowSince = 0; return false; }
   if (!dehumLowSince) dehumLowSince = millis();
@@ -260,21 +257,22 @@ static int lastBand = -1;
 void setup() {
   Serial.begin(115200);
   delay(200);
+  cfgBegin();
+  loadTiles();
   if (!boardInit()) { Serial.println("boardInit failed"); for (;;) delay(1000); }
+  boardSetRotation(1);   // TODO(ui): use cfgRotation() once every page has a portrait layout
   cv = boardCanvas();
   touchBegin();
   audioBegin();
   setenv("TZ", TZ_RULE, 1); tzset();
-  WiFi.mode(WIFI_STA);
-  WiFi.setHostname("cyd-home-panel");
-  WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  netBegin();
   configTzTime(TZ_RULE, "pool.ntp.org", "time.google.com");
   haBegin();
   Serial.println("cyd-home-panel up");
 }
 
 void loop() {
+  netLoop();
   static uint32_t lastDraw = 0, lastWifiLog = 0;
   static bool dirty = true;
   uint32_t ms = millis();
@@ -327,7 +325,7 @@ void loop() {
 
   // backlight
   bool wantDim = night && ms > wakeUntil;
-  if (wantDim != dimmed) { dimmed = wantDim; boardSetBacklight(dimmed ? BL_NIGHT : BL_DAY); dirty = true; }
+  if (wantDim != dimmed) { dimmed = wantDim; boardSetBacklight(dimmed ? BL_NIGHT : cfgBrightness()); dirty = true; }
 
   if (!dirty && ms - lastDraw < 1000) { delay(5); return; }
   dirty = false;

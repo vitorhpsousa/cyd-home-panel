@@ -138,11 +138,16 @@ static void lcdPushFrame(const uint16_t *px /* byte-swapped RGB565, LCD_W*LCD_H 
   csHigh();
 }
 
-static GFXcanvas16 *s_canvas = nullptr;
+static GFXcanvas16 *s_land = nullptr, *s_port = nullptr, *s_canvas = nullptr;
+static uint8_t s_rot = 1;
 static uint16_t *s_txbuf = nullptr;
 static bool s_lcdUp = false;
 
 GFXcanvas16 *boardCanvas() { return s_canvas; }
+void boardSetRotation(uint8_t r) { s_rot = r & 3; s_canvas = (s_rot & 1) ? s_land : s_port; }
+uint8_t boardRotation() { return s_rot; }
+int boardUiW() { return (s_rot & 1) ? LCD_H : LCD_W; }
+int boardUiH() { return (s_rot & 1) ? LCD_W : LCD_H; }
 void boardSetBacklight(uint8_t v) { analogWrite(BOARD_PIN_BL, v); }
 
 void boardPresent() {
@@ -151,23 +156,28 @@ void boardPresent() {
     // Rotate the UI_W x UI_H canvas into the LCD_W x LCD_H tx buffer (byte-swapped), in blocks of
     // 16 source pixels so the 16 destination rows being written stay in cache.
     const int B = 16;
-#if BOARD_ROTATION == 3
-    // canvas (cx,cy) -> panel (cy, LCD_H-1-cx)
-    for (int cx0 = 0; cx0 < UI_W; cx0 += B)
-        for (int cy = 0; cy < UI_H; cy++) {
-            const uint16_t *s = src + (size_t)cy * UI_W + cx0;
-            uint16_t *d = s_txbuf + (size_t)(LCD_H - 1 - cx0) * LCD_W + cy;
-            for (int k = 0; k < B; k++, d -= LCD_W) *d = __builtin_bswap16(s[k]);
-        }
-#else
-    // canvas (cx,cy) -> panel (LCD_W-1-cy, cx)
-    for (int cx0 = 0; cx0 < UI_W; cx0 += B)
-        for (int cy = 0; cy < UI_H; cy++) {
-            const uint16_t *s = src + (size_t)cy * UI_W + cx0;
-            uint16_t *d = s_txbuf + (size_t)cx0 * LCD_W + (LCD_W - 1 - cy);
-            for (int k = 0; k < B; k++, d += LCD_W) *d = __builtin_bswap16(s[k]);
-        }
-#endif
+    if (s_rot == 0) {          // portrait: straight copy
+        for (size_t i = 0; i < (size_t)LCD_W * LCD_H; i++) s_txbuf[i] = __builtin_bswap16(src[i]);
+    } else if (s_rot == 2) {   // portrait upside down: canvas (cx,cy) -> panel (LCD_W-1-cx, LCD_H-1-cy)
+        const size_t n = (size_t)LCD_W * LCD_H;
+        for (size_t i = 0; i < n; i++) s_txbuf[n - 1 - i] = __builtin_bswap16(src[i]);
+    } else if (s_rot == 3) {
+        // canvas (cx,cy) -> panel (cy, LCD_H-1-cx)
+        for (int cx0 = 0; cx0 < LCD_H; cx0 += B)
+            for (int cy = 0; cy < LCD_W; cy++) {
+                const uint16_t *s = src + (size_t)cy * LCD_H + cx0;
+                uint16_t *d = s_txbuf + (size_t)(LCD_H - 1 - cx0) * LCD_W + cy;
+                for (int k = 0; k < B; k++, d -= LCD_W) *d = __builtin_bswap16(s[k]);
+            }
+    } else {
+        // canvas (cx,cy) -> panel (LCD_W-1-cy, cx)
+        for (int cx0 = 0; cx0 < LCD_H; cx0 += B)
+            for (int cy = 0; cy < LCD_W; cy++) {
+                const uint16_t *s = src + (size_t)cy * LCD_H + cx0;
+                uint16_t *d = s_txbuf + (size_t)cx0 * LCD_W + (LCD_W - 1 - cy);
+                for (int k = 0; k < B; k++, d += LCD_W) *d = __builtin_bswap16(s[k]);
+            }
+    }
     lcdPushFrame(s_txbuf);
 }
 
@@ -194,9 +204,11 @@ bool boardInit() {
     pinMode(PIN_TINT, INPUT);
     pinMode(BOARD_PIN_BL, OUTPUT); digitalWrite(BOARD_PIN_BL, LOW);   // on after the first frame
     Wire.begin(BOARD_PIN_SDA, BOARD_PIN_SCL, 400000);
-    s_canvas = new GFXcanvas16(UI_W, UI_H);
+    s_land = new GFXcanvas16(LCD_H, LCD_W);
+    s_port = new GFXcanvas16(LCD_W, LCD_H);
+    boardSetRotation(s_rot);
     s_txbuf = (uint16_t *)heap_caps_malloc((size_t)LCD_W * LCD_H * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!s_canvas || !s_canvas->getBuffer() || !s_txbuf) return false;
+    if (!s_land || !s_land->getBuffer() || !s_port || !s_port->getBuffer() || !s_txbuf) return false;
     lcdInit();
     // The touch controller is part of the display driver: reset it AFTER the LCD init.
     pinMode(PIN_TRST, OUTPUT); digitalWrite(PIN_TRST, LOW); delay(10);
@@ -223,12 +235,13 @@ bool boardTouchRead(int16_t &x, int16_t &y, bool &pressed) {
         y = ((p[2] & 0x3F) << 8) | p[3];
         if (x < LCD_W && y < LCD_H) {
             pressed = true;
-            int16_t px = x, py = y;   // raw panel coords -> landscape canvas coords
-#if BOARD_ROTATION == 3
-            x = LCD_H - 1 - py; y = px;
-#else
-            x = py; y = LCD_W - 1 - px;
-#endif
+            int16_t px = x, py = y;   // raw panel coords -> canvas coords for the current rotation
+            switch (s_rot) {
+                case 0: break;
+                case 1: x = py; y = LCD_W - 1 - px; break;
+                case 2: x = LCD_W - 1 - px; y = LCD_H - 1 - py; break;
+                default: x = LCD_H - 1 - py; y = px; break;
+            }
         }
         break;
     }
