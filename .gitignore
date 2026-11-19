@@ -1,0 +1,5 @@
+.pio/
+src/secrets.h
+src/panel_settings.h
+.DS_Store
+*.raw
