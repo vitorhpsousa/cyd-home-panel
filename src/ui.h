@@ -38,15 +38,36 @@ inline int contentL() { return 10; }
 inline int contentR() { return UI_W - 10; }
 inline int contentW() { return contentR() - contentL(); }
 inline int contentBottom() { return UI_H - DOTS_H; }
-constexpr int CONTROLS_FOOT_H = 46;   // kept free under the Controls rows (room for a lock / confirm bar)
+constexpr int CONTROLS_FOOT_H = 52;   // under the Controls rows: the lock bar (42 px) + gaps
 Rect titleRect();                 // page name in the status bar: long press opens the menu
 Rect heatingRect();               // Home heating card: long press = Hive boost
 Rect tileRect(int i);             // Controls row for switch i (0..NTILES-1); w = 0 if unused
+Rect controlsBarRect();           // lock bar at the bottom of the Controls page (clear of the edge strips)
+Rect boostCardRect();             // "Boost heating?" confirm card
+Rect boostButtonRect(bool start); // its [Start boost] / [Cancel] buttons
 
 // ---- control tiles ----
 struct Tile { const char *name; int sw; int pw; };
 extern Tile TILES[NTILES];
 extern uint32_t pendingUntil[NTILES];
+
+// ---- protection against accidental touches (state kept by main.cpp, drawn by ui_pages.cpp) ----
+// The Controls page opens locked; a tap on the bar unlocks it for 25 s (each switch action restarts
+// the timer). Rows marked confirm-off need a second tap within 3 s to turn OFF. Holding the Heating
+// card asks "Boost heating?" with Cancel on the side where the finger was.
+struct UiGuard {
+  uint32_t unlockedUntil;   // 0 = locked
+  uint32_t barFlashUntil;   // pulse the bar after a tap on a locked row
+  int confirmRow;           // row waiting for its second (OFF) tap, -1 = none
+  uint32_t confirmUntil;
+  bool boostAsk;            // boost confirm card open
+  bool boostCancelLeft;     // Cancel button on the left (finger was on the left half)
+  float boostTarget;
+  uint32_t boostAskUntil;
+};
+extern UiGuard guard;
+constexpr uint32_t UNLOCK_MS = 25000, CONFIRM_MS = 3000, BOOST_ASK_MS = 8000;
+inline bool controlsUnlocked() { return guard.unlockedUntil && (int32_t)(guard.unlockedUntil - millis()) > 0; }
 
 // ---- helpers ----
 bool isOn(int e);
@@ -64,7 +85,7 @@ void drawNav();                   // page dots
 void drawHome(const struct tm &lt, bool timeOk);
 void drawEnergy(time_t now);
 void drawControls();
-void drawOverlays(bool tank);     // toast / tank alert banner
+void drawOverlays(bool tank);     // toast / tank alert banner, boost confirm card
 
 // ---- hidden menu (ui_menu.cpp) ----
 bool menuIsOpen();

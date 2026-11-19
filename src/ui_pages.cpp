@@ -73,7 +73,11 @@ Rect heatingRect() { return homeCard(2); }
 
 // Controls: one compact row per switch that has a name, packed without gaps. Portrait = one column
 // of up to 8 rows; landscape = 2 columns x 4 rows (filled top to bottom, then the right column).
+// Rows, the lock bar and the boost card all stay clear of the edge strips, so an edge tap can only
+// ever change page.
 static int tileCount() { int n = 0; for (int i = 0; i < NTILES; i++) if (*TILES[i].name) n++; return n; }
+static int safeL() { return EDGE + 4; }
+static int safeR() { return UI_W - EDGE - 4; }
 Rect tileRect(int i) {
   if (i < 0 || i >= NTILES || !*TILES[i].name) return {0, 0, 0, 0};
   int slot = 0;
@@ -82,8 +86,22 @@ Rect tileRect(int i) {
   const int cols = boardPortrait() ? 1 : 2, perCol = boardPortrait() ? NTILES : 4;
   const int rows = min(n, perCol);
   const int h = min(56, (bottom - top - gap * (rows - 1)) / max(rows, 1));
-  const int w = (contentW() - colGap * (cols - 1)) / cols;
-  return {contentL() + (slot / perCol) * (w + colGap), top + (slot % perCol) * (h + gap), w, h};
+  const int w = (safeR() - safeL() - colGap * (cols - 1)) / cols;
+  return {safeL() + (slot / perCol) * (w + colGap), top + (slot % perCol) * (h + gap), w, h};
+}
+Rect controlsBarRect() {
+  const int y = contentBottom() - 4 - 42;
+  return {EDGE + 10, y, UI_W - 2 * (EDGE + 10), 42};
+}
+Rect boostCardRect() {
+  const int w = UI_W - 2 * (EDGE + 6), h = 156;
+  return {EDGE + 6, (UI_H - h) / 2 + 10, w, h};
+}
+Rect boostButtonRect(bool start) {
+  Rect c = boostCardRect();
+  const int bw = (c.w - 30) / 2, by = c.y + c.h - 60;
+  bool left = start ? !guard.boostCancelLeft : guard.boostCancelLeft;
+  return {left ? c.x + 10 : c.x + c.w - 10 - bw, by, bw, 50};
 }
 
 // ---- chrome ----
@@ -329,16 +347,72 @@ void drawEnergy(time_t now) {
 }
 
 // ---- Controls ----
+// While locked everything on the rows is drawn at ~60 % towards the background.
+static bool s_fade = false;
+static uint16_t fade(uint16_t c) {
+  if (!s_fade) return c;
+  auto ch = [](uint16_t c, int sh, int mask) { return (c >> sh) & mask; };
+  const int k = 154;   // 0..256: share of the original colour
+  int r = (ch(c, 11, 31) * k + ch(BG, 11, 31) * (256 - k)) >> 8;
+  int g = (ch(c, 5, 63) * k + ch(BG, 5, 63) * (256 - k)) >> 8;
+  int b = (ch(c, 0, 31) * k + ch(BG, 0, 31) * (256 - k)) >> 8;
+  return (r << 11) | (g << 5) | b;
+}
+
 static void toggleSwitch(int x, int y, bool on, bool known, bool pending) {
   const int w = 52, h = 28, r = h / 2;
-  if (!known) { cv->drawRoundRect(x, y, w, h, r, FAINT); cv->drawRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, FAINT); return; }
-  cv->fillRoundRect(x, y, w, h, r, on ? ONFILL : rgb(58, 68, 86));
+  if (!known) { cv->drawRoundRect(x, y, w, h, r, fade(FAINT)); cv->drawRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, fade(FAINT)); return; }
+  cv->fillRoundRect(x, y, w, h, r, fade(on ? ONFILL : rgb(58, 68, 86)));
   const int kx = on ? x + w - r : x + r;
-  cv->fillCircle(kx, y + r, r - 4, pending ? DIM : on ? TXT : rgb(170, 180, 196));
+  cv->fillCircle(kx, y + r, r - 4, fade(pending ? DIM : on ? TXT : rgb(170, 180, 196)));
+}
+
+static void padlock(int x, int y, uint16_t col, bool open) {   // 16 x 22
+  const int sx = open ? x + 7 : x + 3, sy = open ? y - 4 : y;
+  cv->drawRoundRect(sx, sy, 10, 16, 5, col);
+  cv->drawRoundRect(sx + 1, sy + 1, 8, 14, 4, col);
+  cv->fillRoundRect(x, y + 9, 16, 13, 2, col);
+  cv->fillRect(x + 7, y + 13, 2, 5, open ? rgb(20, 70, 40) : CARD_HI);
+}
+
+static void drawControlsBar() {
+  Rect r = controlsBarRect();
+  char b[40];
+  const AAFont &f = aaB20;
+  if (controlsUnlocked()) {
+    const uint16_t fill = rgb(20, 70, 40);
+    cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, fill);
+    cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, GREEN);
+    int left = (int)((guard.unlockedUntil - millis() + 999) / 1000);
+    snprintf(b, sizeof b, "Unlocked \xC2\xB7 locks in %d s", left);
+    const AAFont &bf = aaMeasure(aaB17, b) <= r.w - 50 ? aaB17 : aaR14;
+    int tw = aaMeasure(bf, b), x = r.x + (r.w - tw - 26) / 2;
+    padlock(x, r.y + 10, GREEN, true);
+    aaDraw(cv, x + 26, r.y + (r.h - bf.height) / 2, b, bf, GREEN);
+  } else {
+    bool flash = (int32_t)(guard.barFlashUntil - millis()) > 0;
+    const uint16_t fill = flash ? AMBER : CARD_HI, fg = flash ? BG : TXT;
+    cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, fill);
+    const char *t = "Tap to unlock";
+    int tw = aaMeasure(f, t), x = r.x + (r.w - tw - 28) / 2;
+    padlock(x, r.y + 10, fg, false);
+    if (flash) cv->fillRect(x + 7, r.y + 23, 2, 5, fill);
+    aaDraw(cv, x + 28, r.y + (r.h - f.height) / 2, t, f, fg);
+  }
 }
 
 void drawControls() {
   char b[40];
+  const bool confirmLive = guard.confirmRow >= 0 && (int32_t)(guard.confirmUntil - millis()) > 0;
+  s_fade = !controlsUnlocked();
+  // one name font for all rows: B20 if every name fits (and rows are tall enough), else B17
+  const AAFont *nameFont = &aaB20;
+  for (int i = 0; i < NTILES; i++) {
+    if (!*TILES[i].name) continue;
+    Rect r = tileRect(i);
+    int sx = min(r.x + r.w - 8 - 52, UI_W - EDGE - 6 - 52);
+    if (r.h < 46 || aaMeasure(aaB20, TILES[i].name) > sx - 8 - (r.x + 10)) nameFont = &aaB17;
+  }
   for (int i = 0; i < NTILES; i++) {
     const Tile &t = TILES[i];
     if (!*t.name) continue;   // unused switch
@@ -346,31 +420,33 @@ void drawControls() {
     bool known = ev[t.sw].ok && ev[t.sw].avail;
     bool on = isOn(t.sw);
     bool pending = millis() < pendingUntil[i];
-    card(r, on ? CARD_HI : CARD);
-    if (pending) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, TXT); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, TXT); }
-    const int sx = r.x + r.w - 14 - 52;
+    bool confirm = confirmLive && guard.confirmRow == i;
+    cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, confirm ? rgb(120, 28, 28) : fade(on ? CARD_HI : CARD));
+    if (pending) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, fade(TXT)); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, fade(TXT)); }
+    const int sx = min(r.x + r.w - 8 - 52, UI_W - EDGE - 6 - 52);   // never inside the right edge strip
     toggleSwitch(sx, r.y + (r.h - 28) / 2, on, known, pending);
-    // name, with the watts / status line under it (or beside it when the row is short)
-    const int nx = r.x + 14, room = sx - 12 - nx;
-    char nm[40]; strlcpy(nm, t.name, sizeof nm);
-    fitText(nm, sizeof nm, aaB20, room);
+    // name, with the watts / status line under it
+    const int nx = r.x + 10, room = sx - 8 - nx;
     const char *sub = nullptr;
-    uint16_t subCol = DIM;
-    if (pending) sub = "sending...";
-    else if (!known) { sub = "Unavailable"; subCol = RED; }
+    uint16_t subCol = fade(DIM);
+    if (confirm) { sub = "Tap again: off"; subCol = TXT; }
+    else if (pending) sub = "sending...";
+    else if (!known) { sub = "Unavailable"; subCol = fade(RED); }
     else { float wv = num(t.pw); if (!isnan(wv)) { fmtPower(b, sizeof b, wv); sub = b; } }
-    if (sub && r.h >= 46) {
-      const int top = r.y + (r.h - 24 - 17) / 2;
-      aaDraw(cv, nx, top, nm, aaB20, TXT);
-      aaDraw(cv, nx, top + 23, sub, aaR14, subCol);
-    } else {   // short row: status to the left of the switch, name gets the rest
-      int sw = sub ? aaDrawRight(cv, sx - 12, r.y + (r.h - 17) / 2 + 1, sub, aaR14, subCol) + 10 : 0;
-      strlcpy(nm, t.name, sizeof nm);
-      fitText(nm, sizeof nm, aaB20, room - sw);
-      aaDraw(cv, nx, r.y + (r.h - 24) / 2, nm, aaB20, TXT);
-    }
+    const AAFont &nf = *nameFont;
+    char nm[40]; strlcpy(nm, t.name, sizeof nm);
+    fitText(nm, sizeof nm, nf, room);
+    if (sub) {
+      char sb[40]; strlcpy(sb, sub, sizeof sb);
+      fitText(sb, sizeof sb, aaR14, room);
+      const int top = r.y + (r.h - nf.height - 16) / 2;
+      aaDraw(cv, nx, top, nm, nf, fade(TXT));
+      aaDraw(cv, nx, top + nf.height - 1, sb, aaR14, subCol);
+    } else aaDraw(cv, nx, r.y + (r.h - nf.height) / 2, nm, nf, fade(TXT));
   }
+  s_fade = false;
   if (!tileCount()) aaDrawCentered(cv, UI_W / 2, UI_H / 2 - 12, "No switches set up", aaR20, DIM);
+  else drawControlsBar();
 }
 
 // ---- banners ----
@@ -384,8 +460,27 @@ static void drawBanner(int y, const char *s, uint16_t col) {
   aaDrawCentered(cv, UI_W / 2, y + (38 - f.height) / 2, t, f, TXT);
 }
 
+static void drawBoostAsk() {
+  char b[40];
+  Rect c = boostCardRect();
+  cv->fillRoundRect(c.x - 2, c.y - 2, c.w + 4, c.h + 4, 12, BG);
+  cv->fillRoundRect(c.x, c.y, c.w, c.h, 12, CARD_HI);
+  cv->drawRoundRect(c.x, c.y, c.w, c.h, 12, ORANGE);
+  snprintf(b, sizeof b, "Boost heating to %.0f\xC2\xB0?", guard.boostTarget);
+  static const AAFont *const F[] = {&aaB24, &aaB20, &aaB17};
+  aaDrawCentered(cv, c.x + c.w / 2, c.y + 16, b, aaFit(b, c.w - 20, F, 3), TXT);
+  aaDrawCentered(cv, c.x + c.w / 2, c.y + 50, "for 30 minutes", aaR20, DIM);
+  Rect s = boostButtonRect(true), x = boostButtonRect(false);
+  cv->fillRoundRect(s.x, s.y, s.w, s.h, 10, ORANGE);
+  aaDrawCentered(cv, s.x + s.w / 2, s.y + (s.h - aaB20.height) / 2, aaMeasure(aaB20, "Start boost") <= s.w - 10 ? "Start boost" : "Start", aaB20, BG);
+  cv->fillRoundRect(x.x, x.y, x.w, x.h, 10, CARD);
+  aaDrawCentered(cv, x.x + x.w / 2, x.y + (x.h - aaB20.height) / 2, "Cancel", aaB20, TXT);
+}
+
 void drawOverlays(bool tank) {
+  if (guard.boostAsk) drawBoostAsk();
   int bottom = contentBottom() - 4;
+  if (page == CONTROLS) bottom = controlsBarRect().y - 4;   // keep the lock bar visible
   if (millis() < toastUntil) drawBanner(bottom - 38, toast, CARD_HI);
   else if (tank) drawBanner(bottom - 38, ALERT_TEXT, RED);
 }

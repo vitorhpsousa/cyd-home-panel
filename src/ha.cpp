@@ -12,8 +12,9 @@ static SemaphoreHandle_t mtx;
 static volatile uint32_t lastOkMs = 0;
 static volatile bool lastOk = false;
 
-enum CmdType { CMD_NONE, CMD_TOGGLE, CMD_BOOST, CMD_BOOST_OFF };
-struct Cmd { CmdType t; int ent; float temp; int minutes; };
+enum CmdType { CMD_NONE, CMD_SWITCH, CMD_BOOST, CMD_BOOST_OFF };
+struct Cmd { CmdType t; int ent; float temp; int minutes; bool on; uint32_t atMs; };
+#define CMD_MAX_AGE_MS 5000   // a command that waited longer (e.g. Wi-Fi was down) is dropped, never run late
 static QueueHandle_t cmdQ;
 
 void haSnapshot(EntVal out[E_COUNT]) {
@@ -23,17 +24,17 @@ void haSnapshot(EntVal out[E_COUNT]) {
 }
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
 
-void haToggle(int e) {
-  if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return;   // safety: only the Controls-page switches can be toggled
-  Cmd c = {CMD_TOGGLE, e, 0, 0}; xQueueSend(cmdQ, &c, 0);
+void haSet(int e, bool on) {
+  if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return;   // safety: only the Controls-page switches can be switched
+  Cmd c = {CMD_SWITCH, e, 0, 0, on, millis()}; xQueueSend(cmdQ, &c, 0);
 }
 void haBoost(float t, int m) {
   if (!HIVE_BOOST || !*cfgEntity(E_CLIMATE)) return;
-  Cmd c = {CMD_BOOST, E_CLIMATE, t, m}; xQueueSend(cmdQ, &c, 0);
+  Cmd c = {CMD_BOOST, E_CLIMATE, t, m, true, millis()}; xQueueSend(cmdQ, &c, 0);
 }
 void haBoostOff() {
   if (!HIVE_BOOST || !*cfgEntity(E_CLIMATE)) return;
-  Cmd c = {CMD_BOOST_OFF, E_CLIMATE, 0, 0}; xQueueSend(cmdQ, &c, 0);
+  Cmd c = {CMD_BOOST_OFF, E_CLIMATE, 0, 0, false, millis()}; xQueueSend(cmdQ, &c, 0);
 }
 
 // "2026-11-19T13:00:00+00:00" -> UTC epoch
@@ -112,8 +113,11 @@ static bool post(const char *path, const String &body) {
 }
 
 static void runCmd(const Cmd &c) {
-  if (c.t == CMD_TOGGLE) {
-    post("/api/services/switch/toggle", String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}");
+  if (millis() - c.atMs > CMD_MAX_AGE_MS) { Serial.printf("HA: dropped a stale command for %s\n", cfgEntity(c.ent)); return; }
+  if (c.t == CMD_SWITCH) {
+    // turn_on/turn_off with the state the user saw, never "toggle": a repeat can't undo the first one
+    post(c.on ? "/api/services/switch/turn_on" : "/api/services/switch/turn_off",
+         String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}");
   } else if (c.t == CMD_BOOST) {
     char b[200];
     snprintf(b, sizeof b, "{\"entity_id\":\"%s\",\"time_period\":\"%02d:%02d:00\",\"temperature\":%.1f}",
@@ -130,7 +134,7 @@ static void task(void *) {
   uint32_t lastFast = 0, lastSlow = 0;
   bool first = true;
   for (;;) {
-    if (WiFi.status() != WL_CONNECTED) { lastOk = false; delay(500); continue; }
+    if (WiFi.status() != WL_CONNECTED) { lastOk = false; xQueueReset(cmdQ); delay(500); continue; }   // never run taps late
     Cmd c;
     while (xQueueReceive(cmdQ, &c, 0) == pdTRUE) runCmd(c);
     uint32_t now = millis();

@@ -41,15 +41,36 @@ static bool tankFull() {
   return millis() - dehumLowSince >= ALERT_MS;
 }
 
-// ---- switching ----
-// The ONE path from a tap on a Controls row to haToggle(). Any protection against accidental
-// switching (unlock / confirm) belongs here. haToggle() itself refuses anything but S_TILE1..8.
+// ---- switching (with the accidental-touch guard) ----
+UiGuard guard = {0, 0, -1, 0, false, false, 21, 0};
+static void lockControls() { guard.unlockedUntil = 0; guard.confirmRow = -1; }
+
+// The ONE path from a tap on a Controls row to haSet(). The page must be unlocked; rows marked
+// confirm-off need a second tap within 3 s to turn OFF. haSet() itself refuses anything but S_TILE1..8.
 static void controlsRowTapped(int i, uint32_t ms) {
-  if (ms < pendingUntil[i]) return;   // still waiting for the last command
-  strlcpy(pendingFrom[i], ev[TILES[i].sw].s, sizeof pendingFrom[i]);
+  if (!controlsUnlocked()) { guard.barFlashUntil = ms + 700; audioBeep(500, 40, 20); return; }
+  const int e = TILES[i].sw;
+  if (!ev[e].ok || !ev[e].avail || ms < pendingUntil[i]) return;   // unknown state, or still sending
+  guard.unlockedUntil = ms + UNLOCK_MS;                            // every action restarts the 25 s
+  const bool on = isOn(e);
+  if (on && cfgTileConfirmOff(i)) {
+    bool armed = guard.confirmRow == i && (int32_t)(guard.confirmUntil - ms) > 0;
+    if (!armed) { guard.confirmRow = i; guard.confirmUntil = ms + CONFIRM_MS; audioBeep(700, 40, 25); return; }
+  }
+  guard.confirmRow = -1;
+  strlcpy(pendingFrom[i], ev[e].s, sizeof pendingFrom[i]);
   pendingUntil[i] = ms + 20000;
-  haToggle(TILES[i].sw);
+  haSet(e, !on);   // the state the user saw, flipped
   audioBeep(1200, 25, 25);
+}
+
+static void boostAsk(int fingerX, uint32_t ms) {
+  const EntVal &c = ev[E_CLIMATE];
+  float cur = isnan(num(E_TIN)) ? c.curTemp : num(E_TIN);
+  guard.boostTarget = isnan(cur) ? 21 : constrain(roundf(cur) + 1, 20, 25);
+  guard.boostCancelLeft = fingerX < UI_W / 2;
+  guard.boostAsk = true;
+  guard.boostAskUntil = ms + BOOST_ASK_MS;
 }
 
 // ---- touch ----
@@ -59,27 +80,36 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
     if (te.type == TouchEvent::TAP) { menuTouch(te.x, te.y); audioBeep(1200, 20, 20); }
     return;
   }
+  if (guard.boostAsk) {   // the confirm card takes every touch: Start starts, anything else cancels
+    guard.boostAsk = false;
+    if (te.type == TouchEvent::TAP && boostButtonRect(true).hit(te.x, te.y)) {
+      haBoost(guard.boostTarget, 30);
+      char b[48]; snprintf(b, sizeof b, "Boost 30 min to %.0f\xC2\xB0" "C", guard.boostTarget);
+      showToast(b);
+      audioBeep(900, 60, 30);
+    }
+    return;
+  }
   if (te.type == TouchEvent::LONG && titleRect().hit(te.x, te.y)) {
     menuOpen();
+    lockControls();
     audioBeep(900, 60, 30);
   } else if (te.type == TouchEvent::SWIPE_LEFT || (te.type == TouchEvent::TAP && te.x >= UI_W - EDGE)) {
     page = (page + 1) % NPAGES;
   } else if (te.type == TouchEvent::SWIPE_RIGHT || (te.type == TouchEvent::TAP && te.x < EDGE)) {
     page = (page + NPAGES - 1) % NPAGES;
   } else if (te.type == TouchEvent::TAP && page == CONTROLS) {
-    // edge taps were handled above, so they never reach a row
-    for (int i = 0; i < NTILES; i++)
-      if (*TILES[i].name && tileRect(i).hit(te.x, te.y)) controlsRowTapped(i, ms);
-  } else if (te.type == TouchEvent::LONG && HIVE_BOOST && page == HOME && heatingRect().hit(te.x, te.y)) {
-    const EntVal &c = ev[E_CLIMATE];
-    if (!strcmp(c.preset, "boost")) { haBoostOff(); showToast("Stopping boost"); }
-    else {
-      float cur = isnan(num(E_TIN)) ? c.curTemp : num(E_TIN);
-      float target = isnan(cur) ? 21 : constrain(roundf(cur) + 1, 20, 25);
-      haBoost(target, 30);
-      char b[48]; snprintf(b, sizeof b, "Boost 30 min to %.0f\xC2\xB0" "C", target);
-      showToast(b);
+    // edge taps were handled above, so they never reach a row or the bar
+    if (controlsBarRect().hit(te.x, te.y)) {
+      if (controlsUnlocked()) lockControls(); else { guard.unlockedUntil = ms + UNLOCK_MS; guard.confirmRow = -1; }
+      audioBeep(1000, 25, 20);
+    } else {
+      for (int i = 0; i < NTILES; i++)
+        if (*TILES[i].name && tileRect(i).hit(te.x, te.y)) controlsRowTapped(i, ms);
     }
+  } else if (te.type == TouchEvent::LONG && HIVE_BOOST && page == HOME && heatingRect().hit(te.x, te.y)) {
+    if (!strcmp(ev[E_CLIMATE].preset, "boost")) { haBoostOff(); showToast("Stopping boost"); }   // stopping stays one step
+    else boostAsk(te.x, ms);
     audioBeep(900, 60, 30);
   }
 }
@@ -138,12 +168,31 @@ void loop() {
   bool wantDim = night && ms > wakeUntil;
   if (wantDim != dimmed) { dimmed = wantDim; uiApplyBacklight(); dirty = true; }
 
-  // serial test helpers: 1/2/3 page, r rotate, m menu, i system info, s screenshot
+  // guard housekeeping: leaving the page, the menu or dimming re-locks; timers run out
+  static int lastPage = -1;
+  if (page != CONTROLS || menuIsOpen() || dimmed) {
+    if (guard.unlockedUntil || guard.confirmRow >= 0) { lockControls(); dirty = true; }
+  }
+  if (page != lastPage) { lockControls(); guard.boostAsk = false; lastPage = page; }
+  if (guard.unlockedUntil && !controlsUnlocked()) { lockControls(); dirty = true; }
+  if (guard.confirmRow >= 0 && (int32_t)(guard.confirmUntil - ms) <= 0) { guard.confirmRow = -1; dirty = true; }
+  if (guard.boostAsk && ((int32_t)(guard.boostAskUntil - ms) <= 0 || dimmed || menuIsOpen())) { guard.boostAsk = false; dirty = true; }
+
+  // serial test helpers: 1/2/3 page, r rotate, m menu, i system info, s screenshot.
+  // UI-state only (they never call haSet/haBoost): u unlock/lock Controls, c show the confirm-off
+  // state on the first confirm-off row, b show the boost confirm card.
   int sc = Serial.available() ? Serial.read() : -1;
   if (sc >= '1' && sc <= '3') { menuClose(); page = sc - '1'; dirty = true; }
   else if (sc == 'r') { uiRotateNext(); dirty = true; }
   else if (sc == 'm') { if (menuIsOpen()) menuClose(); else menuOpen(); dirty = true; }
   else if (sc == 'i') { menuOpen(true); dirty = true; }
+  else if (sc == 'u') { if (controlsUnlocked()) lockControls(); else guard.unlockedUntil = ms + UNLOCK_MS; dirty = true; }
+  else if (sc == 'c') {
+    for (int i = 0; i < NTILES; i++)
+      if (*TILES[i].name && cfgTileConfirmOff(i)) { guard.unlockedUntil = ms + UNLOCK_MS; guard.confirmRow = i; guard.confirmUntil = ms + CONFIRM_MS; break; }
+    dirty = true;
+  }
+  else if (sc == 'b') { boostAsk(UI_W - 1, ms); dirty = true; }
   if (sc == 's') dirty = true;   // draw a fresh frame, then dump it below
 
   if (!dirty && ms - lastDraw < 1000) { delay(5); return; }

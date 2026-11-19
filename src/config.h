@@ -23,6 +23,7 @@ void cfgSetBrightness(uint8_t v);
 const char *cfgPlugName(int i);        // i = 0..9, "" = unused
 const char *cfgTileName(int i);        // i = 0..NTILES-1 (8), "" = unused
 int cfgTilePlug(int i);                // i = 0..NTILES-1
+bool cfgTileConfirmOff(int i);         // switching it OFF needs a second tap (e.g. a desk with a PC)
 int cfgAlertPlug();
 
 // Entity IDs, indexed by EntId (ha.h). "" = not used.
