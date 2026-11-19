@@ -37,6 +37,6 @@ void haSnapshot(EntVal out[E_COUNT]);    // thread-safe copy of all values
 bool haOnline();                         // last request succeeded and was < 60 s ago
 const char *haEntityId(int e);
 // Service calls (queued; the task runs them and then re-reads the entity).
-void haToggle(int switchEnt);
+void haSet(int switchEnt, bool on);   // only the Controls-page switches (S_TILE1..S_TILE8); others are ignored
 void haBoost(float temperature, int minutes);
 void haBoostOff();

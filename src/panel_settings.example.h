@@ -90,6 +90,9 @@
 // ---- Controls page: up to 8 on/off switches ------------------------------------------
 // SWITCH = the switch entity to turn on/off (starts with "switch.")
 // PLUG   = which plug number above shows its watts on the button (0 = none)
+// The Controls page opens locked: tap "Unlock" at the bottom first (it locks again by itself).
+// Optional: add  #define TILE1_CONFIRM_OFF 1  (any number 1-8) for something that must not be
+// switched off by mistake, e.g. a desk with a computer: switching it OFF then needs a second tap.
 // Only put things here that are safe to switch off by accident (not a fridge or freezer!).
 #define TILE1_NAME   "Kitchen"
 #define TILE1_SWITCH "switch.kitchen_light"

@@ -304,7 +304,7 @@ void loop() {
           if (*TILES[i].name && te.x >= x && te.x < x + w && te.y >= y && te.y < y + h && millis() >= pendingUntil[i]) {
             strlcpy(pendingFrom[i], ev[TILES[i].sw].s, sizeof pendingFrom[i]);
             pendingUntil[i] = ms + 20000;
-            haToggle(TILES[i].sw);
+            haSet(TILES[i].sw, !isOn(TILES[i].sw));
             audioBeep(1200, 25, 25);
           }
         }

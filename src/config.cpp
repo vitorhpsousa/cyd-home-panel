@@ -52,6 +52,33 @@ static const char *const PLUG_NAMES[10] = {PLUG1_NAME, PLUG2_NAME, PLUG3_NAME, P
 #define TILE8_SWITCH ""
 #define TILE8_PLUG 0
 #endif
+#ifndef TILE1_CONFIRM_OFF
+#define TILE1_CONFIRM_OFF 0
+#endif
+#ifndef TILE2_CONFIRM_OFF
+#define TILE2_CONFIRM_OFF 0
+#endif
+#ifndef TILE3_CONFIRM_OFF
+#define TILE3_CONFIRM_OFF 0
+#endif
+#ifndef TILE4_CONFIRM_OFF
+#define TILE4_CONFIRM_OFF 0
+#endif
+#ifndef TILE5_CONFIRM_OFF
+#define TILE5_CONFIRM_OFF 0
+#endif
+#ifndef TILE6_CONFIRM_OFF
+#define TILE6_CONFIRM_OFF 0
+#endif
+#ifndef TILE7_CONFIRM_OFF
+#define TILE7_CONFIRM_OFF 0
+#endif
+#ifndef TILE8_CONFIRM_OFF
+#define TILE8_CONFIRM_OFF 0
+#endif
+static const bool TILE_CONFIRM[NTILES] = {TILE1_CONFIRM_OFF, TILE2_CONFIRM_OFF, TILE3_CONFIRM_OFF, TILE4_CONFIRM_OFF,
+                                          TILE5_CONFIRM_OFF, TILE6_CONFIRM_OFF, TILE7_CONFIRM_OFF, TILE8_CONFIRM_OFF};
+bool cfgTileConfirmOff(int i) { return i >= 0 && i < NTILES && TILE_CONFIRM[i]; }
 static const char *const TILE_NAMES[NTILES] = {TILE1_NAME, TILE2_NAME, TILE3_NAME, TILE4_NAME,
                                                TILE5_NAME, TILE6_NAME, TILE7_NAME, TILE8_NAME};
 static const int TILE_PLUGS[NTILES] = {TILE1_PLUG, TILE2_PLUG, TILE3_PLUG, TILE4_PLUG,
