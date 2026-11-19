@@ -1,10 +1,10 @@
 #pragma once
-// Runtime settings. Values the user saved on the board (setup page, hidden menu) win; anything not
-// saved falls back to the defaults compiled in from panel_settings.h.
+// Runtime settings: everything comes from panel_settings.h, except rotation and brightness, which
+// the hidden menu changes and the board saves (NVS) so they survive a restart.
 // Everything else in the firmware reads settings through these functions, never the macros directly.
 #include <Arduino.h>
 
-void cfgBegin();                       // load saved values (call first in setup())
+void cfgBegin();                       // load rotation/brightness (call first in setup())
 
 // connection
 const char *cfgWifiSsid();
@@ -21,8 +21,8 @@ void cfgSetBrightness(uint8_t v);
 
 // names and links between entities (plug numbers are 1..10, 0 = none)
 const char *cfgPlugName(int i);        // i = 0..9, "" = unused
-const char *cfgTileName(int i);        // i = 0..3, "" = unused
-int cfgTilePlug(int i);                // i = 0..3
+const char *cfgTileName(int i);        // i = 0..NTILES-1 (8), "" = unused
+int cfgTilePlug(int i);                // i = 0..NTILES-1
 int cfgAlertPlug();
 
 // Entity IDs, indexed by EntId (ha.h). "" = not used.

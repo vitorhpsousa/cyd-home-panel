@@ -87,7 +87,7 @@
 #define PLUG10_POWER ""
 #define PLUG10_COST  ""
 
-// ---- Controls page: 4 buttons ---------------------------------------------------------
+// ---- Controls page: up to 8 on/off switches ------------------------------------------
 // SWITCH = the switch entity to turn on/off (starts with "switch.")
 // PLUG   = which plug number above shows its watts on the button (0 = none)
 // Only put things here that are safe to switch off by accident (not a fridge or freezer!).
@@ -103,6 +103,18 @@
 #define TILE4_NAME   ""
 #define TILE4_SWITCH ""
 #define TILE4_PLUG   0
+#define TILE5_NAME   ""
+#define TILE5_SWITCH ""
+#define TILE5_PLUG   0
+#define TILE6_NAME   ""
+#define TILE6_SWITCH ""
+#define TILE6_PLUG   0
+#define TILE7_NAME   ""
+#define TILE7_SWITCH ""
+#define TILE7_PLUG   0
+#define TILE8_NAME   ""
+#define TILE8_SWITCH ""
+#define TILE8_PLUG   0
 
 // ---- Optional "appliance stopped" alert -----------------------------------------------
 // Red banner + chime when this switch is ON but the plug uses less than ALERT_WATTS for

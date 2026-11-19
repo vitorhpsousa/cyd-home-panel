@@ -24,7 +24,7 @@ bool dimmed = false;
 // Settings use plug numbers 1-10 (0 = none); the code uses entity indexes.
 #define PLUG_ENT(n) ((n) >= 1 && (n) <= NPLUGS ? P_PLUG1 + (n) - 1 : -1)
 static void loadTiles() {
-  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};
+  for (int i = 0; i < 4; i++) TILES[i] = {cfgTileName(i), S_TILE1 + i, PLUG_ENT(cfgTilePlug(i))};   // UI branch shows all NTILES
 }
 static char pendingFrom[4][8];
 
