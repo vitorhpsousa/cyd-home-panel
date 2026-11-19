@@ -192,11 +192,22 @@ static void drawEnergy(time_t now) {
     int col = i / 4, row = i % 4;
     int x = 10 + col * 234, y = 172 + row * 25, w = 226;
     float wv = num(ps[i].pw);
-    aaDraw(cv, x + 4, y, ps[i].n, aaR17, TXT);
     fmtPower(b, sizeof b, wv);
-    int rx = x + w - 4 - aaDrawRight(cv, x + w - 4, y, b, aaB17, TXT);
+    int left = x + w - 4 - aaDrawRight(cv, x + w - 4, y, b, aaB17, TXT);   // left edge of the watts
     float c = ps[i].cost >= 0 ? num(ps[i].cost) : NAN;
-    if (!isnan(c)) { snprintf(b, sizeof b, "\xC2\xA3%.2f", c); aaDrawRight(cv, rx - 8, y + 2, b, aaR14, DIM); }
+    if (!isnan(c)) { snprintf(b, sizeof b, "\xC2\xA3%.2f", c); left -= 8 + aaDrawRight(cv, left - 8, y + 2, b, aaR14, DIM); }
+    // the name gets what is left; long names are cut short with "…"
+    char nm[40]; strlcpy(nm, ps[i].n, sizeof nm);
+    int room = left - 6 - (x + 4);
+    if (aaMeasure(aaR17, nm) > room) {
+      size_t n = strlen(nm);
+      while (n > 1) {
+        do n--; while (n > 1 && (nm[n] & 0xC0) == 0x80);   // step back one UTF-8 character
+        strcpy(nm + n, "\xE2\x80\xA6");
+        if (aaMeasure(aaR17, nm) <= room) break;
+      }
+    }
+    aaDraw(cv, x + 4, y, nm, aaR17, TXT);
     int bw = isnan(wv) ? 0 : (int)((w - 8) * min(1.0f, wv / mx));
     cv->fillRect(x + 4, y + 21, w - 8, 2, CARD);
     if (bw > 0) cv->fillRect(x + 4, y + 21, bw, 2, BLUE);

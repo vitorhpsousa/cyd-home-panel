@@ -12,6 +12,9 @@ into USB, load this program onto it once, and it talks to Home Assistant over yo
 **New to this? Follow the step-by-step guide: [docs/setup-guide.md](docs/setup-guide.md).** It assumes no experience
 and takes about an hour, most of it waiting for downloads.
 
+**Want it different?** Use your own AI assistant to change it: [docs/build-with-ai.md](docs/build-with-ai.md) has
+ready-made prompts and everything the assistant needs to know about the code.
+
 ## What it shows
 
 Swipe left or right, or tap the names at the bottom, to change page.
@@ -25,8 +28,9 @@ Swipe left or right, or tap the names at the bottom, to change page.
 
 Extras:
 
-- **Price colours:** green = cheap, amber = standard, red = peak. The top line and the board's small LED show the
-  current price. A chime plays when the peak price starts.
+- **Price colours:** green = cheap, amber = standard, red = peak. The line under the status bar and the small RGB LED
+  on the back of the board show the current price. The LED is kept dim and turns off at night. A chime plays when the
+  peak price starts.
 - **"HA offline" warning:** shown in red if Home Assistant stops answering for a minute.
 - **Night mode:** the screen dims at night (23:00–07:00 by default). A touch wakes it for 30 seconds.
 - **Optional "appliance stopped" alert:** a red banner and a chime when an appliance that should be running uses
@@ -81,6 +85,23 @@ All your personal settings live in one file, `src/panel_settings.h`. You make it
 - **Display, touch and audio drivers:** come from
   [DPFSentinel-ESP32-S3](https://github.com/vitorhpsousa/DPFSentinel-ESP32-S3), which also documents the board in
   detail.
+
+## Ideas and contributions
+
+This is a personal project shared as-is. Ideas, questions and photos of your own panel are welcome in
+**[Discussions](../../discussions)**. Found a bug? Open an **[issue](../../issues)**.
+
+Ideas not built yet:
+
+- **Install from the browser and set up on the screen:** a one-click web installer, then a Wi-Fi hotspot with a form
+  to enter Wi-Fi, Home Assistant and sensors. No VS Code, and no editing files.
+- **LED status:** the LED shows only the price today. It could also blink when Home Assistant is offline or an alert
+  is active.
+- **Smoother "Using now":** a boiler or heat pump that cycles makes the figure jump every minute (for example 0.9 →
+  7 kW). It could show an average, or a "heating on" marker.
+- Other thermostats (Nest, Tado, generic `climate`) for the boost button.
+- Other energy suppliers, or a fixed price, instead of Octopus.
+- More buttons, more pages (solar, battery, EV charging), and a portrait layout.
 
 ## Licence
 

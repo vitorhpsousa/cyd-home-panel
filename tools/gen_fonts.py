@@ -9,7 +9,7 @@ OUT = os.path.join(HERE, "..", "src")
 REG = os.path.join(HERE, "fonts", "DejaVuSans.ttf")
 BOLD = os.path.join(HERE, "fonts", "DejaVuSans-Bold.ttf")
 
-FULL = [chr(c) for c in range(32, 127)] + ["°", "–", "·", "×", "£", "→"]
+FULL = [chr(c) for c in range(32, 127)] + ["°", "–", "·", "×", "£", "→", "…"]
 CLOCK = list(" 0123456789:")   # huge clock digits only
 
 # (C identifier, ttf, px, charset)

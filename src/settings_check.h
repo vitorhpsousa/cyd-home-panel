@@ -3,5 +3,5 @@
 #if __has_include("panel_settings.h")
 #include "panel_settings.h"
 #else
-#error "panel_settings.h is missing: copy src/panel_settings.example.h to src/panel_settings.h and fill it in (README, step 5)"
+#error "panel_settings.h is missing: copy src/panel_settings.example.h to src/panel_settings.h and fill it in (docs/setup-guide.md, step 5)"
 #endif

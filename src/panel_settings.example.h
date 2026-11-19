@@ -109,7 +109,7 @@
 // ALERT_MINUTES (for example a dehumidifier that stopped because its tank is full).
 // The panel never switches this one, it only watches it. Leave ALERT_SWITCH "" to turn the alert off.
 #define ALERT_SWITCH  ""
-#define ALERT_PLUG    0
+#define ALERT_PLUG    0     // which plug number above (1-10) measures it
 #define ALERT_WATTS   50
 #define ALERT_MINUTES 10
 #define ALERT_TEXT    "Dehumidifier tank full?"

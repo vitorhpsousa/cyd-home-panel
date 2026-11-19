@@ -137,7 +137,7 @@ Make a list:
 
 1. In VS Code's Explorer on the left, open the `src` folder.
 2. Right-click **`panel_settings.example.h`**, choose **Copy**, then right-click the `src` folder and choose **Paste**.
-   You get a file called `panel_settings copy.example.h` or similar.
+   You get a file called `panel_settings.example copy.h` or similar.
 3. Right-click the copy, choose **Rename**, and name it exactly **`panel_settings.h`**.
 4. Open `panel_settings.h` and fill it in from your note.
    - **Only change what is inside the "quotes" and the numbers.** Keep the quotes.
@@ -158,7 +158,7 @@ How the main parts work:
 - **Prices:** `RATE_CHEAP` and `RATE_PEAK` are in pounds per kWh. The defaults suit Octopus Cosy.
 - **`HIVE_BOOST`:** set it to `1` if you have Hive heating (holding the Heating card then boosts it). Otherwise set `0`.
 - **Alert (optional):** a red banner when `ALERT_SWITCH` is on but its plug uses less than `ALERT_WATTS` for
-  `ALERT_MINUTES`.
+  `ALERT_MINUTES`. `ALERT_PLUG` is the number (1–10) of the plug above that measures it.
 
 Your settings stay on your computer: `panel_settings.h` is never uploaded to GitHub.
 
@@ -209,6 +209,12 @@ its own after power cuts.
 
 Edit `src/panel_settings.h`, save it, plug the board into the computer and click **Upload (→)** again. Your settings
 are kept in that file, so you only change what you need.
+
+---
+
+**Getting a newer version later:** download the ZIP again, unzip it, and copy your `src/panel_settings.h` into the new
+folder's `src` folder before you click Upload. Check `panel_settings.example.h` for new settings and copy any new lines
+into your file.
 
 ---
 
