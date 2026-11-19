@@ -1,13 +1,13 @@
 # CYD Home Panel
 
 A small 3.5" touch screen that shows your **Home Assistant** home at a glance: the time, inside and outside
-temperature, heating, live electricity use and cost, the current electricity price, and four buttons to switch lights
-or plugs on and off.
+temperature, heating, live electricity use and cost, the current electricity price, and up to 8 switches for lights
+and plugs. It works the right way up in any of four orientations, portrait or landscape.
 
 It runs on a cheap ESP32-S3 3.5" "CYD" (Cheap Yellow Display) board. There is no soldering and no wiring: you plug it
 into USB, load this program onto it once, and it talks to Home Assistant over your Wi-Fi.
 
-![The three pages: Home, Energy and Controls](docs/screenshot.png)
+![Home, Energy and Controls in landscape (top) and portrait with the hidden menu (bottom)](docs/screenshot.png)
 
 **New to this? Follow the step-by-step guide: [docs/setup-guide.md](docs/setup-guide.md).** It assumes no experience
 and takes about an hour, most of it waiting for downloads.
@@ -17,14 +17,26 @@ ready-made prompts and everything the assistant needs to know about the code.
 
 ## What it shows
 
-Swipe left or right, or tap the names at the bottom, to change page.
+**Changing page:** tap near the left or right edge of the screen, or swipe. The dots at the bottom show which page
+you're on.
 
-- **Home:** a big clock, the date, inside and outside temperature, the weather, and the heating.
+- **Home:** a big clock, the date, inside and outside temperature, the weather, and the heating. In portrait it also
+  shows today's cost and use.
   With Hive heating, **hold your finger on the Heating card** to boost the heating for 30 minutes (to the room
-  temperature +1 °C, between 20 and 25 °C). Hold it again to stop the boost.
+  temperature +1 °C, between 20 and 25 °C). It asks first: tap **Start** to confirm. Hold it again to stop the boost.
 - **Energy:** how much power the whole house is using right now (split into "plugs" and "everything else"), today's
   cost and kWh, the current electricity price and when the next price starts, and your top 8 smart plugs by power.
-- **Controls:** four big buttons. Tap one to switch that light or plug on or off.
+- **Controls:** up to 8 on/off switches for lights and plugs. The page opens **locked** so a stray touch can't
+  switch anything: tap **Tap to unlock** at the bottom first. It locks again by itself 25 seconds after your last tap.
+  Anything you choose (for example a desk with a computer) can also need a second tap to turn off.
+
+**Hidden menu:** hold the page name (top left) for about a second. It has:
+
+- **Rotate:** turns the picture 90° per tap (portrait, landscape and both upside-down versions);
+- **Brightness − / +**;
+- **System info:** Wi-Fi, Home Assistant connection, memory and uptime.
+
+Rotation and brightness are saved on the board.
 
 Extras:
 
@@ -50,20 +62,16 @@ Anything you don't have is simply left blank in the settings, and that part of t
 
 ## Settings
 
-All your personal settings live in one file, `src/panel_settings.h`. You make it by copying
-[`src/panel_settings.example.h`](src/panel_settings.example.h). It holds:
-
-- your Wi-Fi name and password;
-- your Home Assistant address and access token;
-- the names of the Home Assistant entities to show;
-- the price levels and the night-time hours.
-
-`panel_settings.h` is listed in `.gitignore`, so it is never uploaded if you share your copy of this project.
+Your settings (Wi-Fi, Home Assistant address and token, which sensors and switches to show, prices, night hours) live
+in one file, `src/panel_settings.h`, made from [`src/panel_settings.example.h`](src/panel_settings.example.h). It is
+never uploaded if you share your copy of this project. The [setup guide](docs/setup-guide.md) walks you through it.
 
 ## Safety notes
 
-- The panel can only switch the four entities you put on the Controls page. Don't put a fridge, freezer or anything
-  else that must stay on there.
+- The panel can only switch the entities you put on the Controls page, and only after **Tap to unlock**. Don't put a
+  fridge, freezer or anything else that must stay on there.
+- A tap is sent as "turn on" or "turn off" for the state you saw. If Home Assistant is unreachable, the tap is dropped,
+  never sent minutes later.
 - The alert entity is only watched, never switched.
 - The access token lets the panel control Home Assistant. For extra safety you can create a separate, non-admin Home
   Assistant user just for the panel and make the token from that user ([guide, step 4](docs/setup-guide.md#4-get-the-details-from-home-assistant)).
@@ -71,20 +79,10 @@ All your personal settings live in one file, `src/panel_settings.h`. You make it
 
 ## For developers
 
-- Build: `pio run`. Flash: `pio run -t upload`. Logs: `pio device monitor` (Wi-Fi, HA status and memory every 10 s).
-- Data comes from the HA REST API. Each entity is read with `GET /api/states/<id>`: switches and power every 5 s,
-  everything else every 30 s.
-  - The websocket API is not used, because some Octopus sensors carry 3–4 KB attributes.
-  - A filtered streaming parse of one entity at a time keeps memory use tiny.
-- Bluetooth relays (for example SwitchBot) can take 5–40 s to react. A button shows "sending..." for up to 20 s
-  until the new state arrives.
-- **Screenshots over USB:** send `1`, `2` or `3` on the serial port to change page.
-  - `tools/screenshot.py PORT out.png` (run with PlatformIO's Python, which has pyserial) saves the screen.
-  - `tools/raw2png.py out.png.raw out.png` (needs Pillow) converts the raw dump.
-- **Fonts:** pre-rendered anti-aliased DejaVu Sans, made by `tools/gen_fonts.py`.
-- **Display, touch and audio drivers:** come from
-  [DPFSentinel-ESP32-S3](https://github.com/vitorhpsousa/DPFSentinel-ESP32-S3), which also documents the board in
-  detail.
+Build with `pio run`, flash with `pio run -t upload`, logs with `pio device monitor`. The code map, layout rules and
+how to take screenshots over USB are in [docs/build-with-ai.md](docs/build-with-ai.md). The display, touch and audio
+drivers come from [DPFSentinel-ESP32-S3](https://github.com/vitorhpsousa/DPFSentinel-ESP32-S3), which documents the
+board in detail.
 
 ## Ideas and contributions
 
@@ -93,15 +91,15 @@ This is a personal project shared as-is. Ideas, questions and photos of your own
 
 Ideas not built yet:
 
-- **Install from the browser and set up on the screen:** a one-click web installer, then a Wi-Fi hotspot with a form
-  to enter Wi-Fi, Home Assistant and sensors. No VS Code, and no editing files.
+- **Install from the browser:** a one-click web installer, plus a way to enter Wi-Fi and Home Assistant details on
+  the board (for example a setup hotspot), so nobody needs VS Code or to edit a file.
 - **LED status:** the LED shows only the price today. It could also blink when Home Assistant is offline or an alert
   is active.
 - **Smoother "Using now":** a boiler or heat pump that cycles makes the figure jump every minute (for example 0.9 →
   7 kW). It could show an average, or a "heating on" marker.
 - Other thermostats (Nest, Tado, generic `climate`) for the boost button.
 - Other energy suppliers, or a fixed price, instead of Octopus.
-- More buttons, more pages (solar, battery, EV charging), and a portrait layout.
+- More pages: solar, battery, EV charging.
 
 ## Licence
 

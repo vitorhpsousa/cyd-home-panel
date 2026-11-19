@@ -123,7 +123,7 @@ Make a list:
 | Thermostat | `climate.hive` | `ENT_HEATING` |
 | Octopus prices, cost, kWh, demand | search `current_rate` | `ENT_RATE` … `ENT_DEMAND` |
 | Each smart plug's power (watts) | `sensor.kettle_plug_power` | `PLUG1_POWER` … |
-| Up to 4 switches for the buttons | `switch.kitchen_lamp` | `TILE1_SWITCH` … |
+| Up to 8 switches for the Controls page | `switch.kitchen_lamp` | `TILE1_SWITCH` … |
 
 **Octopus entities:** search for `current_rate`. You will find a name like
 `sensor.octopus_energy_electricity_1a2b3c_1234567890_current_rate`. The middle part (between `electricity_` and
@@ -151,9 +151,12 @@ How the main parts work:
   - `POWER` is the plug's watts sensor.
   - `COST` is optional (an Octopus "cost tracker" sensor for that plug).
   - The Energy page shows the 8 plugs using the most power at that moment.
-- **Buttons (`TILE1` to `TILE4`):**
-  - `SWITCH` is what the button turns on and off.
-  - `PLUG` is the number of the plug above whose watts appear on the button, or `0` for none.
+- **Switches (`TILE1` to `TILE8`):**
+  - `NAME` is the label on the Controls page.
+  - `SWITCH` is what it turns on and off.
+  - `PLUG` is the number of the plug above whose watts appear next to it, or `0` for none.
+  - For something that must not go off by mistake (for example a desk with a computer), add a line such as
+    `#define TILE5_CONFIRM_OFF 1`. Turning it off then needs a second tap.
   - **Don't add a fridge, freezer, router or anything else that must stay on.**
 - **Prices:** `RATE_CHEAP` and `RATE_PEAK` are in pounds per kWh. The defaults suit Octopus Cosy.
 - **`HIVE_BOOST`:** set it to `1` if you have Hive heating (holding the Heating card then boosts it). Otherwise set `0`.
@@ -198,7 +201,15 @@ If it says **"Failed to connect"**:
 3. Lines such as `HA GET sensor.xxx -> 404` mean that entity ID is wrong. Check its spelling in `panel_settings.h`,
    then upload again.
 
-✅ **Check:** `wifi 3` and `ha 1`. The Energy and Controls pages show your figures (swipe left).
+✅ **Check:** `wifi 3` and `ha 1`. The Energy and Controls pages show your figures (tap the right edge of the
+screen, or swipe, to change page).
+
+**Using it:**
+
+- **Change page:** tap near the left or right edge, or swipe.
+- **Controls:** tap **Tap to unlock** at the bottom, then tap a switch. It locks again by itself after 25 seconds.
+- **Hidden menu:** hold the page name (top left) for about a second. Use it to **rotate** the screen to fit how you
+  mount it, change the **brightness**, or see **system info**. These are saved on the board.
 
 Now unplug the board from the computer and plug it into any USB phone charger wherever you want it. It reconnects on
 its own after power cuts.
@@ -229,7 +240,9 @@ into your file.
 | "Connecting to Wi-Fi..." forever | Wrong Wi-Fi name or password (capitals matter), or a 5 GHz-only network. |
 | Top right says **HA offline** in red | Wrong `HA_HOST` (it must be numbers like `192.168.1.50`), wrong port, or the token was copied badly or deleted. Make a new token and paste it again. |
 | A value shows `--` | That entity ID is wrong, or the device is offline in Home Assistant. Check the ID in the Entities list. |
-| A button says **Unavailable** | That switch is offline in Home Assistant (for example the plug is unplugged). |
-| A button says "sending..." for a while | Normal for Bluetooth switches: they can take up to ~20–40 seconds. |
+| A switch says **Unavailable** | That switch is offline in Home Assistant (for example the plug is unplugged). |
+| A switch says "sending..." for a while | Normal for Bluetooth switches: they can take up to ~20–40 seconds. |
+| Tapping a switch does nothing | The Controls page is locked: tap **Tap to unlock** at the bottom first. |
+| The screen is sideways or upside down | Hidden menu (hold the page name) → **Rotate**. |
 | The time is wrong by an hour | The `TZ_RULE` doesn't match your country. The default is UK. |
 | Holding the Heating card does nothing | `HIVE_BOOST` is `0`, or your thermostat isn't Hive. |
