@@ -7,6 +7,7 @@
 #include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
+#include <bootloader_random.h>
 
 static const char *NS = "panel";
 
@@ -20,7 +21,7 @@ struct Store {
   char tileName[4][L_NAME + 1];
   uint16_t port;
   uint8_t tilePlug[4], alertPlug;
-  char apPass[12];
+  char apPass[16];
 };
 static Store *S = nullptr;   // in PSRAM (about 4.5 KB)
 static volatile uint8_t s_rot = 1, s_bl = 255;
@@ -105,11 +106,14 @@ static void setNum(Field &f, int v) {
 static int getNum(const Field &f) { return isPort(f) ? *(uint16_t *)f.ptr : *(uint8_t *)f.ptr; }
 
 static void makeApPass(Preferences &p) {
-  // 8 characters without look-alikes (0/O, 1/l/I): about 40 bits, typed on a phone without fuss.
+  // 12 characters without look-alikes (0/O, 1/l/I): about 59 bits. Made once per board. Wi-Fi is not
+  // running yet, so switch on the hardware entropy source while generating it.
   static const char AL[] = "abcdefghjkmnpqrstuvwxyz23456789";
-  if (p.isKey("appass") && p.getString("appass", S->apPass, sizeof S->apPass) >= 8) return;
-  for (int i = 0; i < 8; i++) S->apPass[i] = AL[esp_random() % (sizeof AL - 1)];
-  S->apPass[8] = 0;
+  if (p.isKey("appass") && p.getString("appass", S->apPass, sizeof S->apPass) >= 12) return;
+  bootloader_random_enable();
+  for (int i = 0; i < 12; i++) S->apPass[i] = AL[esp_random() % (sizeof AL - 1)];
+  bootloader_random_disable();
+  S->apPass[12] = 0;
   p.putString("appass", S->apPass);
 }
 

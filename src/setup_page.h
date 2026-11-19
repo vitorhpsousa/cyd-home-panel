@@ -59,7 +59,7 @@ details{border-top:1px solid var(--line);padding:6px 0}summary{cursor:pointer;fo
 <p class="dim">Forget everything saved here and go back to the settings the panel was built with. Screen rotation and brightness are kept.</p>
 <button type="button" id="reset">Reset to file defaults</button></div>
 </main>
-<div id="bar"><div class="msg" id="smsg"></div><button type="button" class="pri" id="save">Save and restart</button></div>
+<div id="bar"><div class="msg" id="smsg"></div><button type="button" class="pri" id="save" disabled>Save and restart</button></div>
 
 <datalist id="dl_sensor"></datalist><datalist id="dl_switch"></datalist>
 <datalist id="dl_climate"></datalist><datalist id="dl_weather"></datalist>
@@ -120,7 +120,7 @@ function sta(s){if(!s)return;
   else msg('wmsg','No Wi-Fi set up yet.');}
 
 async function j(url,opt){const r=await fetch(url,opt);let d={};try{d=await r.json();}catch(e){}d._s=r.status;return d;}
-function post(url,p){return j(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(p).toString()});}
+function post(url,p){return j(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Setup':'1'},body:new URLSearchParams(p).toString()});}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 async function scan(again){
@@ -191,6 +191,6 @@ $('reset').onclick=async()=>{
 };
 
 build();
-j('/cfg').then(d=>{cfg=d;fill();});
+j('/cfg').then(d=>{if(d._s!==200){msg('smsg','Could not load the current settings. Reload this page.',false);return;}cfg=d;fill();$('save').disabled=false;});
 scan(false);
 </script></body></html>)HTML";

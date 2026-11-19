@@ -13,6 +13,7 @@
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
 #include <esp_mac.h>
+#include <atomic>
 
 static const uint32_t IDLE_STOP_MS = 15UL * 60UL * 1000UL;   // hotspot turns itself off after 15 min unused
 static const uint32_t STA_RETRY_MS = 60000;                  // re-join the home Wi-Fi every minute while it's down
@@ -43,7 +44,7 @@ static PsramAlloc psram;
 // Runs in its own task so the screen stays responsive while HA sends a few hundred KB.
 // The loop task only starts a job when none is running, and only reads the results once done.
 enum JobState : uint8_t { J_IDLE, J_RUNNING, J_OK, J_FAIL };
-static volatile JobState jobState = J_IDLE;
+static std::atomic<JobState> jobState{J_IDLE};   // release/acquire: entList etc. are published by the J_OK store
 static char jobHost[64], jobToken[304], jobMsg[96];
 static uint16_t jobPort;
 static char *entList = nullptr;      // JSON, in PSRAM, owned by the loop task once jobState != J_RUNNING
@@ -140,9 +141,20 @@ static void freeEntList() {
 
 // ---- web handlers ------------------------------------------------------------------------------
 // Only clients on the hotspot get an answer. The server is also only running in setup mode.
+static bool sameSubnet(IPAddress a, IPAddress b) { return a[0] == b[0] && a[1] == b[1] && a[2] == b[2]; }
 static bool allowed() {
   if (!setupOn) return false;
-  if (server->client().localIP() != WiFi.softAPIP()) {
+  // The connection must arrive on the hotspot address AND come from a hotspot client: lwIP accepts
+  // packets for any of the board's IPs on any interface, so a LAN host could route to 192.168.4.1.
+  // The Host header must be the hotspot address (blocks DNS-rebinding), and POSTs must carry the
+  // X-Setup header, which a page on another site can't add without a preflight we never answer.
+  bool ok = server->client().localIP() == WiFi.softAPIP() && sameSubnet(server->client().remoteIP(), apIp);
+  String host = server->hostHeader();
+  int colon = host.indexOf(':');
+  if (colon >= 0) host = host.substring(0, colon);
+  ok = ok && host == apIp.toString();
+  if (ok && server->method() == HTTP_POST && server->header("X-Setup") != "1") ok = false;
+  if (!ok) {
     server->send(403, "text/plain", "The setup page is only available on the panel's setup hotspot.");
     return false;
   }
@@ -231,6 +243,15 @@ static void handleScan() {
 // Secrets: empty = keep the saved one (the "open" checkbox clears the Wi-Fi password).
 static bool saveArgs(String &err, String &errKey, bool wifiOnly) {
   int n = cfgFieldCount();
+  if (!wifiOnly) {   // the saved token must never follow a changed address (it would be sent there after restart)
+    String h = server->arg("host"), p = server->arg("port"), t = server->arg("token");
+    h.trim(); p.trim(); t.trim();
+    bool hostChanged = server->hasArg("host") && h != cfgHaHost();
+    bool portChanged = server->hasArg("port") && p.length() && (uint16_t)p.toInt() != cfgHaPort();
+    if ((hostChanged || portChanged) && !t.length() && *cfgHaToken()) {
+      errKey = "token"; err = "must be pasted again because the address changed"; return false;
+    }
+  }
   for (int pass = 0; pass < 2; pass++) {
     for (int i = 0; i < n; i++) {
       CfgFieldInfo fi;
@@ -287,6 +308,11 @@ static void handleTest() {
   if (cfgFieldCheck(pi, port.c_str())) { sendJson(200, "{\"ok\":false,\"err\":\"Port must be 1-65535\"}"); return; }
   if (token.length() && cfgFieldCheck(ti, token.c_str())) { sendJson(200, "{\"ok\":false,\"err\":\"The token doesn't look right\"}"); return; }
   if (!token.length() && !*cfgHaToken()) { sendJson(200, "{\"ok\":false,\"err\":\"Paste the Home Assistant token first.\"}"); return; }
+  // The saved token is only ever sent to the saved address: a new address needs the token pasted again.
+  if (!token.length() && (host != cfgHaHost() || (uint16_t)port.toInt() != cfgHaPort())) {
+    sendJson(200, "{\"ok\":false,\"err\":\"You changed the address, so paste the token again (the saved one is only sent to the saved address).\"}");
+    return;
+  }
   strlcpy(jobHost, host.c_str(), sizeof jobHost);
   jobPort = (uint16_t)port.toInt();
   strlcpy(jobToken, token.length() ? token.c_str() : cfgHaToken(), sizeof jobToken);
@@ -331,7 +357,10 @@ static void handleReset() {
 
 // Captive portal: any other address (phones probing for internet) goes to the setup page.
 static void handleOther() {
-  if (!setupOn || server->client().localIP() != WiFi.softAPIP()) { server->send(404, "text/plain", ""); return; }
+  if (!setupOn || server->client().localIP() != WiFi.softAPIP() || !sameSubnet(server->client().remoteIP(), apIp)) {
+    server->send(404, "text/plain", "");
+    return;
+  }
   server->sendHeader("Location", String("http://") + apIp.toString() + "/", true);
   server->send(302, "text/plain", "");
 }
@@ -385,6 +414,8 @@ void netStartSetup() {
   server->on("/save", HTTP_POST, handleSave);
   server->on("/reset", HTTP_POST, handleReset);
   server->onNotFound(handleOther);
+  static const char *hdrs[] = {"X-Setup"};
+  server->collectHeaders(hdrs, 1);
   server->begin();
   WiFi.scanNetworks(true);   // results ready by the time the phone opens the page
   setupOn = true;
@@ -421,6 +452,14 @@ void netLoop() {
   uint32_t now = millis();
   if (restartAt && (int32_t)(now - restartAt) >= 0) { Serial.println("setup: restarting"); delay(100); ESP.restart(); }
   if (setupOn) {
+    if (WiFi.status() == WL_CONNECTED && sameSubnet(WiFi.localIP(), apIp) && apIp != IPAddress(192, 168, 77, 1)) {
+      Serial.println("setup: home Wi-Fi uses the hotspot's subnet, moving the hotspot to 192.168.77.1");
+      bool a = autoSetup;
+      netStopSetup();
+      netStartSetup();   // picks 192.168.77.1 now that the home network is up on 192.168.4.x
+      autoSetup = a;
+      return;
+    }
     dns->processNextRequest();
     server->handleClient();
     // Auto-off after 15 min without page use and nobody on the hotspot (not when there's no Wi-Fi
