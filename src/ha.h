@@ -29,7 +29,6 @@ struct EntVal {
   char action[12];      // climate hvac_action
   char preset[10];      // climate preset_mode
   time_t end;           // octopus rate: end of the period (UTC), 0 if none
-  uint32_t atMs;        // millis() of last update
 };
 
 void haBegin();                          // starts the poll task (call after WiFi.begin)

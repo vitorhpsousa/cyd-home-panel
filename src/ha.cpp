@@ -6,7 +6,6 @@
 #include <ArduinoJson.h>
 
 const char *haEntityId(int e) { return cfgEntity(e); }
-#define IDS_(e) cfgEntity(e)
 
 static EntVal g[E_COUNT];
 static SemaphoreHandle_t mtx;
@@ -25,7 +24,7 @@ void haSnapshot(EntVal out[E_COUNT]) {
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
 
 void haToggle(int e) {
-  if (e < S_TILE1 || e > S_TILE4 || !*IDS_(e)) return;   // safety: only the 4 Controls-page switches can be toggled
+  if (e < S_TILE1 || e > S_TILE4 || !*cfgEntity(e)) return;   // safety: only the 4 Controls-page switches can be toggled
   Cmd c = {CMD_TOGGLE, e, 0, 0}; xQueueSend(cmdQ, &c, 0);
 }
 void haBoost(float t, int m) {
@@ -59,8 +58,8 @@ static WiFiClient client;
 static HTTPClient http;
 
 static bool fetch(int e) {
-  if (!*IDS_(e)) return true;   // not configured
-  String path = String("/api/states/") + IDS_(e);
+  if (!*cfgEntity(e)) return true;   // not configured
+  String path = String("/api/states/") + cfgEntity(e);
   http.begin(client, cfgHaHost(), cfgHaPort(), path);
   http.addHeader("Authorization", String("Bearer ") + cfgHaToken());
   int code = http.GET();
@@ -70,7 +69,7 @@ static bool fetch(int e) {
       xSemaphoreTake(mtx, portMAX_DELAY); g[e].avail = false; g[e].ok = true; xSemaphoreGive(mtx);
       return true;
     }
-    Serial.printf("HA GET %s -> %d\n", IDS_(e), code);
+    Serial.printf("HA GET %s -> %d\n", cfgEntity(e), code);
     return false;
   }
   JsonDocument filter;
@@ -81,7 +80,7 @@ static bool fetch(int e) {
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
   http.end();
-  if (err) { Serial.printf("HA parse %s: %s\n", IDS_(e), err.c_str()); return false; }
+  if (err) { Serial.printf("HA parse %s: %s\n", cfgEntity(e), err.c_str()); return false; }
 
   EntVal v = {};
   const char *st = doc["state"] | "";
@@ -96,7 +95,6 @@ static bool fetch(int e) {
   strlcpy(v.preset, a["preset_mode"] | "", sizeof v.preset);
   v.end = parseIso(a["end"] | "");
   v.ok = true;
-  v.atMs = millis();
   xSemaphoreTake(mtx, portMAX_DELAY); g[e] = v; xSemaphoreGive(mtx);
   return true;
 }
@@ -115,7 +113,7 @@ static bool post(const char *path, const String &body) {
 
 static void runCmd(const Cmd &c) {
   if (c.t == CMD_TOGGLE) {
-    post("/api/services/switch/toggle", String("{\"entity_id\":\"") + IDS_(c.ent) + "\"}");
+    post("/api/services/switch/toggle", String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}");
   } else if (c.t == CMD_BOOST) {
     char b[200];
     snprintf(b, sizeof b, "{\"entity_id\":\"%s\",\"time_period\":\"%02d:%02d:00\",\"temperature\":%.1f}",
