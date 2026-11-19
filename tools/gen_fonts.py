@@ -9,15 +9,15 @@ OUT = os.path.join(HERE, "..", "src")
 REG = os.path.join(HERE, "fonts", "DejaVuSans.ttf")
 BOLD = os.path.join(HERE, "fonts", "DejaVuSans-Bold.ttf")
 
-FULL = [chr(c) for c in range(32, 127)] + ["°", "–", "·", "×", "£", "→", "…", "↻"]
+FULL = [chr(c) for c in range(32, 127)] + ["°", "·", "£", "→", "…", "↻"]
 CLOCK = list(" -0123456789:")   # huge clock digits only ("--:--" before the time is known)
+NUM = list(" -.0123456789°£kW")  # big figures: temperatures, £, watts/kW
 
 # (C identifier, ttf, px, charset)
 FONTS = [
     ("aaR14", REG, 14, FULL), ("aaR17", REG, 17, FULL), ("aaR20", REG, 20, FULL),
-    ("aaR24", REG, 24, FULL),
     ("aaB17", BOLD, 17, FULL), ("aaB20", BOLD, 20, FULL), ("aaB24", BOLD, 24, FULL),
-    ("aaB30", BOLD, 30, FULL), ("aaB36", BOLD, 36, FULL), ("aaB44", BOLD, 44, FULL),
+    ("aaB30", BOLD, 30, FULL), ("aaB36", BOLD, 36, NUM), ("aaB44", BOLD, 44, NUM),
     ("aaB80", BOLD, 80, CLOCK),      # portrait clock (320 px wide screen)
     ("aaB100", BOLD, 100, CLOCK),    # landscape clock
 ]

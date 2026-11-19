@@ -157,8 +157,8 @@ void audioAlert(AlertKind kind) {
   if (s_muted) return;
   const uint8_t v = AUDIO_MAX_VOLUME_PCT;
   switch (kind) {
-    case SOOT_AMBER:  enqueue(880, 100, v); enqueue(0, 60, 0); enqueue(880, 100, v); enqueue(0, 60, 0); enqueue(988, 170, v); break; // caution
-    case SOOT_RED:    { static const uint16_t n[] = {1047, 0, 1047, 0, 880, 784, 698, 587}; static const uint16_t d[] = {70, 40, 70, 80, 150, 150, 150, 450};
+    case PEAK_CHIME:  enqueue(880, 100, v); enqueue(0, 60, 0); enqueue(880, 100, v); enqueue(0, 60, 0); enqueue(988, 170, v); break; // caution
+    case APPLIANCE_ALERT:    { static const uint16_t n[] = {1047, 0, 1047, 0, 880, 784, 698, 587}; static const uint16_t d[] = {70, 40, 70, 80, 150, 150, 150, 450};
                         for (int i = 0; i < 8; i++) enqueue(n[i], d[i], n[i] ? v : 0); } break;                 // two blips + falling "game over" feel
   }
 }

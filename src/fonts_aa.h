@@ -14,7 +14,6 @@ struct AAFont {
 extern const AAFont aaR14;
 extern const AAFont aaR17;
 extern const AAFont aaR20;
-extern const AAFont aaR24;
 extern const AAFont aaB17;
 extern const AAFont aaB20;
 extern const AAFont aaB24;

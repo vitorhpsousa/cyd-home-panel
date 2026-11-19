@@ -212,11 +212,11 @@ void loop() {
   else if (band == 1) neopixelWrite(LED_PIN, ledB, ledB / 2, 0);
   else if (band == 2) neopixelWrite(LED_PIN, ledB, 0, 0);
   else neopixelWrite(LED_PIN, 0, 0, 0);
-  if (band == 2 && lastBand == 1 && !night) { audioAlert(SOOT_AMBER); showToast(PEAK_MESSAGE); }
+  if (band == 2 && lastBand == 1 && !night) { audioAlert(PEAK_CHIME); showToast(PEAK_MESSAGE); }
   if (band >= 0) lastBand = band;
 
   bool tank = tankFull();
-  if (tank && !tankAlerted) { tankAlerted = true; if (!night) audioAlert(SOOT_RED); }
+  if (tank && !tankAlerted) { tankAlerted = true; if (!night) audioAlert(APPLIANCE_ALERT); }
   if (!tank) tankAlerted = false;
 
   if (menuIsOpen()) menuDraw();

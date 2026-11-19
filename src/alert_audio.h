@@ -3,7 +3,7 @@
 #pragma once
 #include <Arduino.h>
 
-enum AlertKind { SOOT_AMBER, SOOT_RED };   // TODO rename after the UI merge: PEAK, APPLIANCE
+enum AlertKind { PEAK_CHIME, APPLIANCE_ALERT };   // peak price starts; appliance stopped
 
 // Pins: I2C/I2S PROVEN (https://github.com/vitorhpsousa/DPFSentinel-ESP32-S3/blob/main/docs/cyd35-hardware-notes.md).
 #define AUDIO_PIN_MCLK 17
