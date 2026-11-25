@@ -39,6 +39,7 @@ struct EntVal {
 void haBegin();                          // starts the poll task (call after WiFi.begin)
 void haSnapshot(EntVal out[E_COUNT]);    // thread-safe copy of all values
 bool haOnline();                         // last request succeeded and was < 60 s ago
+bool haBusy();                           // a command is still being sent
 const char *haEntityId(int e);
 // Service calls (queued; the task runs them and then re-reads the entity).
 bool haSet(int switchEnt, bool on);   // only the Controls-page switches; false = not sent (offline/busy)

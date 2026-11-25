@@ -28,6 +28,7 @@ void haSnapshot(EntVal out[E_COUNT]) {
   xSemaphoreGive(mtx);
 }
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
+bool haBusy() { for (int e = 0; e < E_COUNT; e++) if (inflight[e]) return true; return false; }
 
 static bool startCmd(const Cmd &c);
 // The service domain for a Controls tile: the part of its entity ID before the dot, if it is one the

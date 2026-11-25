@@ -110,4 +110,6 @@ void menuTick();                  // closes the menu after 30 s without a touch
 void menuTouched();               // any touch while open (keeps it open)
 void uiRotateNext();              // +90 degrees, saved and applied immediately
 void uiApplyBacklight();          // day brightness from config, or the night level while dimmed
+extern bool powerTestPending;
+extern uint32_t wokeAtMs;          // when the panel last woke from sleep (0 = never): status shows "Updating" for a while     // set by the menu's Power test button; main runs powerTestRun()
 extern bool dimmed;

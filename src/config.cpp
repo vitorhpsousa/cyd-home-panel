@@ -127,6 +127,10 @@ bool cfgFlowOptionValid(const char *o) {   // o must be one whole item of FLOW_O
 }
 const char *cfgLogButtons() { return LOG_BUTTONS; }
 const char *cfgLogName() { return LOG_NAME; }
+#ifndef SLEEP_AFTER_S
+#define SLEEP_AFTER_S 0
+#endif
+int cfgSleepAfterS() { return SLEEP_AFTER_S; }
 
 static const char *const IDS[E_COUNT] = {
   ENT_INDOOR_TEMP, ENT_OUTDOOR_TEMP, ENT_HEATING, ENT_WEATHER,

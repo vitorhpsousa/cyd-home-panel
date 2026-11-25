@@ -152,3 +152,11 @@
 #define FLOW_OPTIONS      "65,70,75"
 #define LOG_BUTTONS       ""     // e.g. "1 hob;2 hobs;2 hobs/+ oven;Oven;Kitchen/other;Sink/hot water"
 #define LOG_NAME          "House log"
+
+// ---- Battery saving (optional) --------------------------------------------------------
+// After this many seconds without a touch the panel turns its screen and Wi-Fi off and sleeps
+// (about 1.3 W awake, close to 0 W asleep on the test board). Tap the screen to wake it: that tap
+// only wakes it, it never presses anything. Data is a few seconds old until Wi-Fi is back, and
+// there are no alerts while it sleeps. 0 = never sleep (best when it runs from a charger).
+// Note: some power banks switch themselves off when the draw gets this small.
+#define SLEEP_AFTER_S 0

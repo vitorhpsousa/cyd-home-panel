@@ -51,7 +51,9 @@ Tips:
 | `src/main.cpp` | Setup and the main loop: touch handling (swipes, forgiving taps, unlock, confirm, long presses), night dimming, the rate LED, the peak chime and the "appliance stopped" alert. Redraws at most once a second from a snapshot of HA values. |
 | `src/ui.h` | Shared UI state, palette and layout helpers: `EDGE` (side margins), `contentL/R/W/Bottom()`, the tap areas (`titleRect`, `heatingRect`, `tileRect`, `controlsBarRect`, …) and the accidental-touch guard (`UiGuard`: unlock 25 s, confirm-off 3 s, boost confirm 8 s). |
 | `src/ui_pages.cpp` | Draws the status bar, page dots and the four pages (Log only when set up), each with a landscape and a portrait layout, plus overlays (toast, alert banner, boost confirm). |
-| `src/ui_menu.cpp` | The hidden menu (hold the page name): Rotate, Brightness, System info. |
+| `src/ui_menu.cpp` | The hidden menu (hold the page name): Rotate, Brightness, System info, Power test. |
+| `src/sleep.*` | Battery saving (`SLEEP_AFTER_S`): backlight off, display off (DISPOFF), Wi-Fi off, light sleep; the touch INT pin (GPIO 47, low on touch) wakes it. Not SLPIN: in SLPIN the touch controller (part of the display driver) stops reporting taps. |
+| `src/power_test.*` | Hidden-menu Power test: six 15 s stages (normal, backlight off, display off, display asleep, + Wi-Fi off, + light sleep) for a USB meter, with a tap check in stages 3 and 4. |
 | `src/board.*` | Display (ST77922 over QSPI), backlight and touch. Rotation is set at run time (`boardSetRotation(0..3)`: 0/2 portrait 320x480, 1/3 landscape 480x320); there is one PSRAM canvas per shape and `boardPresent()` rotates it onto the panel. `UI_W`/`UI_H` give the current size. |
 | `src/touch.*` | Turns raw touches into tap (20–600 ms, moved ≤ 20 px), long press (0.7 s, stayed within 20 px) and swipe left/right. |
 | `src/aatext.*`, `src/fonts_aa.*` | Anti-aliased text. `fonts_aa.*` are **generated** by `tools/gen_fonts.py`. |
@@ -101,4 +103,6 @@ python3 tools/raw2png.py shot.png.raw shot.png
 Use your board's port: `/dev/cu.usbmodem…` on macOS, `/dev/ttyACM0` on Linux, or `COM5` or similar on Windows
 (where PlatformIO's Python is `%USERPROFILE%\.platformio\penv\Scripts\python.exe`). Running `pio device list`, or
 PlatformIO → Devices in VS Code, shows the port. Keys you can send on the serial port first (they only change what is shown, never switch anything): `1`/`2`/`3`/`4`
-page, `r` rotate, `m` menu, `i` system info, `u` lock/unlock look, `c` confirm-off look, `b` boost-confirm look, `a` alert-banner look.
+page, `r` rotate, `m` menu, `i` system info, `u` lock/unlock look, `c` confirm-off look, `b` boost-confirm look, `a` alert-banner look. `p` runs the Power test, `z` turns sleep off until the next restart.
+
+With `SLEEP_AFTER_S` set, the board sleeps after that many idle seconds and its USB port goes quiet: tap the screen (or send `z` while it is awake) before flashing or taking screenshots.

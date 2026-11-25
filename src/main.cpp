@@ -12,6 +12,8 @@
 #include "config.h"
 #include "net.h"
 #include "ui.h"
+#include "power_test.h"
+#include "sleep.h"
 
 #define LED_PIN 40
 #define BL_NIGHT 18
@@ -188,6 +190,10 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
 
 // ---- main ----
 static uint32_t wakeUntil = 0;
+uint32_t wokeAtMs = 0;
+static uint32_t swallowUntil = 0;   // touches right after waking only woke the panel
+static uint32_t lastTouchMs = 0;
+static bool sleepOn = true;         // serial 'z' turns sleep off until the next restart (e.g. to flash)
 static int lastBand = -1;
 
 void setup() {
@@ -231,7 +237,8 @@ void loop() {
     bool wasDim = dimmed;
     wakeUntil = ms + 30000;
     dirty = true;
-    if (!wasDim) onTouch(te, ms);
+    lastTouchMs = ms;
+    if (!wasDim && (int32_t)(ms - swallowUntil) > 0) onTouch(te, ms);
     else if (menuIsOpen()) menuTouched();
   }
   menuTick();
@@ -250,7 +257,7 @@ void loop() {
   if (guard.confirmRow >= 0 && (int32_t)(guard.confirmUntil - ms) <= 0) { guard.confirmRow = -1; dirty = true; }
   if (guard.boostAsk && ((int32_t)(guard.boostAskUntil - ms) <= 0 || dimmed || menuIsOpen())) { guard.boostAsk = false; dirty = true; }
 
-  // serial test helpers: 1/2/3/4 page, r rotate, m menu, i system info, s screenshot.
+  // serial test helpers: 1/2/3/4 page, r rotate, p power test, z sleep off/on (until restart), m menu, i system info, s screenshot.
   // UI-state only (they never call haSet/haBoost): u unlock/lock Controls, c show the confirm-off
   // state on the first confirm-off row, b show the boost confirm card, a show/hide the alert banner.
   int sc = Serial.available() ? Serial.read() : -1;
@@ -266,6 +273,30 @@ void loop() {
   }
   else if (sc == 'b') { boostAsk(UI_W - 1, ms); dirty = true; }
   else if (sc == 'a') { tankLook = !tankLook; dirty = true; }
+  else if (sc == 'p') powerTestPending = true;
+  else if (sc == 'z') { sleepOn = !sleepOn; Serial.printf("sleep %s\n", sleepOn ? "on" : "off until restart"); }
+  if (powerTestPending) {
+    powerTestPending = false;
+    menuClose();
+    powerTestRun();
+    wakeUntil = millis() + 30000;
+    lastTouchMs = millis();
+    dirty = true;
+  }
+
+  // battery saving: nothing touched for SLEEP_AFTER_S and nothing going on -> sleep until a tap
+  if (cfgSleepAfterS() > 0 && sleepOn && (int32_t)(millis() - lastTouchMs) > cfgSleepAfterS() * 1000 && !menuIsOpen() &&
+      !guard.boostAsk && !controlsUnlocked() && !haBusy() && !toastShowing()) {
+    if (sleepUntilTouch()) {
+      wokeAtMs = swallowUntil = millis();
+      swallowUntil += 1500;
+      lastTouchMs = wakeUntil = millis();
+      wakeUntil += 30000;
+      dimmed = false;
+      uiApplyBacklight();
+    } else lastTouchMs = millis();   // touch pin busy: try again after another idle period
+    dirty = true;
+  }
   if (sc == 's') dirty = true;   // draw a fresh frame, then dump it below
 
   if (!dirty && ms - lastDraw < 1000) { delay(5); return; }

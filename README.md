@@ -36,11 +36,17 @@ you're on.
   the hot water heats; tap again to end the pause), and buttons that record a setting you change by hand, such as the
   boiler's flow temperature. It opens locked, like Controls. The page only appears if you set it up.
 
+**Battery saving (optional):** set `SLEEP_AFTER_S` and the panel turns its screen and Wi-Fi off after that many
+seconds without a touch. Tap anywhere to wake it (that tap only wakes it). On the test board it drew about 1.3 W awake
+and about 0.3 W asleep. The data refreshes a few seconds after waking, and there are no alerts while it sleeps.
+
 **Hidden menu:** hold the page name (top left) for about a second. It has:
 
 - **Rotate:** turns the picture 90° per tap (portrait, landscape and both upside-down versions);
 - **Brightness − / +**;
 - **System info:** Wi-Fi, Home Assistant connection, memory and uptime.
+- **Power test:** six 15-second power states, one after another, so you can read each off a USB power meter (the
+  screen shows the stage number and the LED blinks it).
 
 Rotation and brightness are saved on the board.
 

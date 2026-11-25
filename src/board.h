@@ -32,3 +32,6 @@ void boardSetBacklight(uint8_t v);   // 0..255
 // Reads the touch controller with one 39-byte burst. Returns false on I2C error.
 // pressed=false means no finger; x 0..UI_W-1, y 0..UI_H-1 (canvas coordinates for the current rotation) otherwise.
 bool boardTouchRead(int16_t &x, int16_t &y, bool &pressed);
+// Display power: 0 = on, 1 = display off (DISPOFF), 2 = sleep (DISPOFF + SLPIN). Backlight is separate.
+void boardDisplayMode(int m);
+int boardTouchIntLevel();        // raw level of the touch INT pin (GPIO 47)

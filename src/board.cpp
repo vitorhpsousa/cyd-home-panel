@@ -200,6 +200,22 @@ static void lcdInit() {
     s_lcdUp = true;
 }
 
+// 0 = on, 1 = display off (DISPOFF: panel dark, controller running), 2 = sleep (DISPOFF + SLPIN).
+// The touch controller lives in the display driver, so leaving sleep also resets the touch side.
+static int s_dispMode = 0;
+void boardDisplayMode(int m) {
+    if (m == s_dispMode || !s_lcdUp) return;
+    if (s_dispMode == 2) {   // wake the controller first
+        lcdReg(0x11, nullptr, 0); delay(120);   // SLPOUT
+        digitalWrite(PIN_TRST, LOW); delay(10); digitalWrite(PIN_TRST, HIGH); delay(100);
+    }
+    if (m == 0) lcdReg(0x29, nullptr, 0);                                  // DISPON
+    else if (m == 1) lcdReg(0x28, nullptr, 0);                             // DISPOFF
+    else { lcdReg(0x28, nullptr, 0); lcdReg(0x10, nullptr, 0); delay(5); } // DISPOFF + SLPIN
+    s_dispMode = m;
+}
+int boardTouchIntLevel() { return digitalRead(PIN_TINT); }
+
 bool boardInit() {
     pinMode(PIN_TINT, INPUT);
     pinMode(BOARD_PIN_BL, OUTPUT); digitalWrite(BOARD_PIN_BL, LOW);   // on after the first frame

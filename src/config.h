@@ -33,6 +33,7 @@ const char *cfgFlowOptions();          // "65,70,75": the flow buttons, options 
 bool cfgFlowOptionValid(const char *o);
 const char *cfgLogButtons();           // "1 hob;2 hobs;Sink/hot water": '/' starts the small second line
 const char *cfgLogName();              // name on the logbook lines
+int cfgSleepAfterS();                  // battery saving: sleep after this many idle seconds, 0 = never
 
 // Entity IDs, indexed by EntId (ha.h). "" = not used.
 const char *cfgEntity(int e);

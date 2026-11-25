@@ -118,13 +118,14 @@ void drawStatus(const struct tm &lt, bool timeOk) {
   float r = num(E_RATE);
   char b[32];
   int x = UI_W - 12;
-  if (!haOnline()) { x -= aaDrawRight(cv, x, 4, "HA offline", aaB17, RED); }
+  if (!haOnline() && wokeAtMs && millis() - wokeAtMs < 20000) { x -= aaDrawRight(cv, x, 4, "Updating...", aaB17, DIM); }
+  else if (!haOnline()) { x -= aaDrawRight(cv, x, 4, "HA offline", aaB17, RED); }
   else if (!isnan(r)) {
     snprintf(b, sizeof b, "%.1fp", r * 100);
     x -= aaDrawRight(cv, x, 4, b, aaB17, rateCol(r)) + 6;
     if (!boardPortrait()) aaDrawRight(cv, x, 4, rateName(r), aaR17, rateCol(r));   // no room next to the clock in portrait
   }
-  cv->fillRect(0, 27, UI_W, 2, haOnline() ? rateCol(r) : RED);
+  cv->fillRect(0, 27, UI_W, 2, haOnline() ? rateCol(r) : (wokeAtMs && millis() - wokeAtMs < 20000) ? DIM : RED);
 }
 
 void drawNav() {

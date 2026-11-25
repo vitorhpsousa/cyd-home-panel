@@ -8,7 +8,8 @@ static bool open_ = false, info_ = false;
 static uint32_t lastTouch = 0;
 static const uint32_t MENU_TIMEOUT_MS = 30000;
 
-enum Btn { B_CLOSE, B_ROT, B_INFO, B_DN, B_UP, NBTN };
+enum Btn { B_CLOSE, B_ROT, B_INFO, B_DN, B_UP, B_PTEST, NBTN };
+bool powerTestPending = false;
 
 static Rect btn(int b) {
   const int W = UI_W;
@@ -19,6 +20,7 @@ static Rect btn(int b) {
       case B_ROT: return {L, 62, gw, h};
       case B_INFO: return {L + gw + 10, 62, gw, h};
       case B_DN: return {L, 130, 110, h + 8};
+      case B_PTEST: return {R - 190, 214, 190, 48};
       default: return {R - 110, 130, 110, h + 8};   // B_UP
     }
   }
@@ -27,6 +29,7 @@ static Rect btn(int b) {
     case B_ROT: return {L, 64, R - L, h};
     case B_DN: return {L, 140, 90, h + 16};
     case B_UP: return {R - 90, 140, 90, h + 16};
+    case B_PTEST: return {L, 372, R - L, 56};
     default: return {L, 232, R - L, h};     // B_INFO
   }
 }
@@ -65,6 +68,7 @@ void menuTouch(int x, int y) {
   else if (btn(B_INFO).hit(x, y)) info_ = true;
   else if (btn(B_DN).hit(x, y)) stepBrightness(-1);
   else if (btn(B_UP).hit(x, y)) stepBrightness(1);
+  else if (btn(B_PTEST).hit(x, y)) { powerTestPending = true; menuClose(); }
 }
 
 static void button(const Rect &r, const char *label, uint16_t fill = CARD_HI, uint16_t fg = TXT) {
@@ -124,6 +128,7 @@ void menuDraw() {
   Rect r = btn(B_ROT);
   button(r, "\xE2\x86\xBB  Rotate");
   button(btn(B_INFO), "System info");
+  button(btn(B_PTEST), "Power test");
 
   Rect dn = btn(B_DN), up = btn(B_UP);
   plusMinus(dn, false);
