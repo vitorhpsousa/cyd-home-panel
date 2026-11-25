@@ -30,6 +30,11 @@ you're on.
 - **Controls:** up to 8 on/off switches for lights and plugs. The page opens **locked** so a stray touch can't
   switch anything: tap **Tap to unlock** at the bottom first. It locks again by itself 25 seconds after your last tap.
   Anything you choose (for example a desk with a computer) can also need a second tap to turn off.
+- **Log (optional):** buttons that note what is going on, so your energy and heating data can be explained later. Each
+  tap adds a time-stamped line to Home Assistant's logbook (for example "2 hobs + oven" or "Sink hot water"). It can
+  also have a **Shower** button that runs a Home Assistant script (for example: pause the heating for 10 minutes while
+  the hot water heats; tap again to end the pause), and buttons that record a setting you change by hand, such as the
+  boiler's flow temperature. It opens locked, like Controls. The page only appears if you set it up.
 
 **Hidden menu:** hold the page name (top left) for about a second. It has:
 
@@ -77,6 +82,8 @@ never uploaded if you share your copy of this project. The [setup guide](docs/se
 - Switches show their new state straight away (like the Home Assistant app) and each command is sent on its own, so a
   slow Bluetooth relay never holds up the other switches.
 - The alert entity is only watched, never switched.
+- The Log page can only write logbook lines, pick one of the listed options on its one input_select, and run its two
+  shower scripts, again only after **Tap to unlock**.
 - The access token lets the panel control Home Assistant. For extra safety you can create a separate, non-admin Home
   Assistant user just for the panel and make the token from that user ([guide, step 4](docs/setup-guide.md#4-get-the-details-from-home-assistant)).
 - If you lose the board, delete its token in Home Assistant.

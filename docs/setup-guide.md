@@ -123,7 +123,7 @@ Make a list:
 | Thermostat | `climate.hive` | `ENT_HEATING` |
 | Octopus prices, cost, kWh, demand | search `current_rate` | `ENT_RATE` … `ENT_DEMAND` |
 | Each smart plug's power (watts) | `sensor.kettle_plug_power` | `PLUG1_POWER` … |
-| Up to 8 switches for the Controls page | `switch.kitchen_lamp` | `TILE1_SWITCH` … |
+| Up to 8 switches or lights for the Controls page | `switch.kitchen_lamp`, `light.led_strip` | `TILE1_SWITCH` … |
 
 **Octopus entities:** search for `current_rate`. You will find a name like
 `sensor.octopus_energy_electricity_1a2b3c_1234567890_current_rate`. The middle part (between `electricity_` and
@@ -163,6 +163,12 @@ How the main parts work:
 - **Alert (optional):** a red banner when `ALERT_SWITCH` is on but its plug uses less than `ALERT_WATTS` for
   `ALERT_MINUTES`. `ALERT_PLUG` is the number (1–10) of the plug above that measures it. Tap the banner to hide it
   until the appliance runs again.
+- **Log page (optional):** `LOG_BUTTONS` lists the buttons, separated by `;` (a `/` starts the small second line:
+  `Sink/hot water`). Each tap adds a line to the logbook under `LOG_NAME`. `FLOW_SELECT` is an input_select you keep
+  for a hand-set value (for example the boiler's flow temperature) and `FLOW_OPTIONS` the buttons for it.
+  `SHOWER_SCRIPT` and `SHOWER_END_SCRIPT` are two scripts you create in Home Assistant: the first does whatever "shower"
+  means in your home (for example: turn the heating off, wait up to 10 minutes or until the second script fires an event,
+  then put the heating back); the panel shows it as running while the script is on. Leave them all `""` to hide the page.
 
 Your settings stay on your computer: `panel_settings.h` is never uploaded to GitHub.
 
@@ -209,6 +215,7 @@ or right to change page).
 
 - **Change page:** swipe left or right.
 - **Controls:** tap **Tap to unlock** at the bottom, then tap a switch. It locks again by itself after 25 seconds.
+- **Log:** the same: unlock, then tap. A green flash and a message at the bottom confirm each line was sent.
 - **Hidden menu:** hold the page name (top left) for about a second. Use it to **rotate** the screen to fit how you
   mount it, change the **brightness**, or see **system info**. These are saved on the board.
 

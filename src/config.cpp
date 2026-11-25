@@ -88,6 +88,46 @@ const char *cfgTileName(int i) { return (i >= 0 && i < NTILES) ? TILE_NAMES[i] :
 int cfgTilePlug(int i) { return (i >= 0 && i < NTILES) ? TILE_PLUGS[i] : 0; }
 int cfgAlertPlug() { return ALERT_PLUG; }
 
+// Log page settings are optional (older panel_settings.h copies don't have them).
+#ifndef SHOWER_SCRIPT
+#define SHOWER_SCRIPT ""
+#endif
+#ifndef SHOWER_END_SCRIPT
+#define SHOWER_END_SCRIPT ""
+#endif
+#ifndef SHOWER_MINUTES
+#define SHOWER_MINUTES 10
+#endif
+#ifndef FLOW_SELECT
+#define FLOW_SELECT ""
+#endif
+#ifndef FLOW_OPTIONS
+#define FLOW_OPTIONS ""
+#endif
+#ifndef LOG_BUTTONS
+#define LOG_BUTTONS ""
+#endif
+#ifndef LOG_NAME
+#define LOG_NAME "House log"
+#endif
+const char *cfgShowerEndScript() { return SHOWER_END_SCRIPT; }
+int cfgShowerMinutes() { return SHOWER_MINUTES; }
+const char *cfgFlowOptions() { return FLOW_OPTIONS; }
+bool cfgFlowOptionValid(const char *o) {   // o must be one whole item of FLOW_OPTIONS
+  size_t n = strlen(o);
+  if (!n) return false;
+  for (const char *p = FLOW_OPTIONS; *p;) {
+    const char *e = strchr(p, ',');
+    size_t len = e ? (size_t)(e - p) : strlen(p);
+    if (len == n && !strncmp(p, o, n)) return true;
+    if (!e) break;
+    p = e + 1;
+  }
+  return false;
+}
+const char *cfgLogButtons() { return LOG_BUTTONS; }
+const char *cfgLogName() { return LOG_NAME; }
+
 static const char *const IDS[E_COUNT] = {
   ENT_INDOOR_TEMP, ENT_OUTDOOR_TEMP, ENT_HEATING, ENT_WEATHER,
   ENT_RATE, ENT_NEXT_RATE, ENT_TODAY_KWH, ENT_TODAY_COST,
@@ -99,5 +139,6 @@ static const char *const IDS[E_COUNT] = {
   TILE1_SWITCH, TILE2_SWITCH, TILE3_SWITCH, TILE4_SWITCH,
   TILE5_SWITCH, TILE6_SWITCH, TILE7_SWITCH, TILE8_SWITCH,
   ALERT_SWITCH,
+  FLOW_SELECT, SHOWER_SCRIPT, "",   // X_LOG is not an entity
 };
 const char *cfgEntity(int e) { return (e >= 0 && e < E_COUNT) ? IDS[e] : ""; }

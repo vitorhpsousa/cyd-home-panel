@@ -26,5 +26,13 @@ int cfgTilePlug(int i);                // i = 0..NTILES-1
 bool cfgTileConfirmOff(int i);         // switching it OFF needs a second tap (e.g. a desk with a PC)
 int cfgAlertPlug();
 
+// Log page (all optional; the page is hidden when none of them is set)
+const char *cfgShowerEndScript();      // script that ends the shower pause early
+int cfgShowerMinutes();                // pause length, only for the "until" time on screen
+const char *cfgFlowOptions();          // "65,70,75": the flow buttons, options of FLOW_SELECT
+bool cfgFlowOptionValid(const char *o);
+const char *cfgLogButtons();           // "1 hob;2 hobs;Sink/hot water": '/' starts the small second line
+const char *cfgLogName();              // name on the logbook lines
+
 // Entity IDs, indexed by EntId (ha.h). "" = not used.
 const char *cfgEntity(int e);

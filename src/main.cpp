@@ -1,5 +1,5 @@
-// CYD home panel: 3 pages (Home, Energy, Controls) fed by Home Assistant. Swipe left/right to change
-// page; hold the page name for the hidden menu. Drawing lives in ui_pages.cpp / ui_menu.cpp.
+// CYD home panel: 4 pages (Home, Energy, Controls and the optional Log) fed by Home Assistant. Swipe
+// left/right to change page; hold the page name for the hidden menu. Drawing lives in ui_pages.cpp / ui_menu.cpp.
 #include <Arduino.h>
 #include <WiFi.h>
 #include <time.h>
@@ -71,6 +71,44 @@ static void controlsRowTapped(int i, uint32_t ms) {
   audioBeep(1200, 25, 25);
 }
 
+// A tap on a Log page button (the page must be unlocked, like Controls). Shower runs the pause script
+// (or ends a running pause), the flow buttons set the flow select, the others write a logbook line.
+static void logTapped(int i, uint32_t ms) {
+  if (!controlsUnlocked()) { guard.barFlashUntil = ms + 700; audioBeep(500, 40, 20); return; }
+  guard.unlockedUntil = ms + UNLOCK_MS;
+  const LogCell &c = logCell(i);
+  char b[64], hm[8] = "--:--";
+  time_t now = time(nullptr);
+  if (now > 1735689600) { struct tm lt; localtime_r(&now, &lt); strftime(hm, sizeof hm, "%H:%M", &lt); }
+  bool ok;
+  if (c.kind == LK_SHOWER) {
+    const bool paused = isOn(S_SHOWER), off = ev[E_CLIMATE].ok && !strcmp(ev[E_CLIMATE].s, "off");
+    ok = haShower(!paused);
+    if (paused) strlcpy(b, "Ending the pause", sizeof b);
+    else if (off) snprintf(b, sizeof b, "Shower logged %s \xC2\xB7 heating is off", hm);
+    else snprintf(b, sizeof b, "Heating paused for %d min", cfgShowerMinutes());
+  } else if (c.kind == LK_FLOW) {
+    if (!strcmp(ev[E_FLOW].s, c.text)) {
+      snprintf(b, sizeof b, "Flow is already %s", c.main);
+      showToast(b); audioBeep(700, 40, 25);
+      return;
+    }
+    ok = haFlow(c.text);
+    snprintf(b, sizeof b, "Flow set to %s at %s", c.main, hm);
+  } else {
+    ok = haLog(c.text);
+    snprintf(b, sizeof b, "Logged %s: %s", hm, c.text);
+    if (ok) logFlash(i);
+  }
+  if (!ok) {
+    showToast(haOnline() ? "Still sending - try again in a moment" : "Home Assistant offline - not sent");
+    audioBeep(400, 80, 25);
+    return;
+  }
+  showToast(b);
+  audioBeep(1200, 25, 25);
+}
+
 static void boostAsk(int fingerX, uint32_t ms) {
   const EntVal &c = ev[E_CLIMATE];
   float cur = isnan(num(E_TIN)) ? c.curTemp : num(E_TIN);
@@ -116,9 +154,20 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
     lockControls();
     audioBeep(900, 60, 30);
   } else if (te.type == TouchEvent::SWIPE_LEFT) {
-    page = (page + 1) % NPAGES;
+    page = pageStep(page, +1);
   } else if (te.type == TouchEvent::SWIPE_RIGHT) {
-    page = (page + NPAGES - 1) % NPAGES;
+    page = pageStep(page, -1);
+  } else if (te.type == TouchEvent::TAP && page == LOG) {
+    // same forgiving taps as Controls: the nearest button or the bar within TAP_SLOP px
+    int best = -2, bestD = TAP_SLOP + 1;
+    int d = rectDist(controlsBarRect(), te.x, te.y);
+    if (d < bestD) { bestD = d; best = -1; }
+    for (int i = 0; i < logCount(); i++)
+      if ((d = rectDist(logCellRect(i), te.x, te.y)) < bestD) { bestD = d; best = i; }
+    if (best == -1) {
+      guard.unlockedUntil = ms + UNLOCK_MS;
+      audioBeep(1000, 25, 20);
+    } else if (best >= 0) logTapped(best, ms);
   } else if (te.type == TouchEvent::TAP && page == CONTROLS) {
     // forgiving: a tap goes to the nearest row or the bar, if it is within TAP_SLOP px of it
     int best = -2, bestD = TAP_SLOP + 1;
@@ -193,7 +242,7 @@ void loop() {
 
   // guard housekeeping: leaving the page, the menu or dimming re-locks; timers run out
   static int lastPage = -1;
-  if (page != CONTROLS || menuIsOpen() || dimmed) {
+  if (!pageLocked(page) || menuIsOpen() || dimmed) {
     if (guard.unlockedUntil || guard.confirmRow >= 0) { lockControls(); dirty = true; }
   }
   if (page != lastPage) { lockControls(); guard.boostAsk = false; lastPage = page; }
@@ -201,11 +250,11 @@ void loop() {
   if (guard.confirmRow >= 0 && (int32_t)(guard.confirmUntil - ms) <= 0) { guard.confirmRow = -1; dirty = true; }
   if (guard.boostAsk && ((int32_t)(guard.boostAskUntil - ms) <= 0 || dimmed || menuIsOpen())) { guard.boostAsk = false; dirty = true; }
 
-  // serial test helpers: 1/2/3 page, r rotate, m menu, i system info, s screenshot.
+  // serial test helpers: 1/2/3/4 page, r rotate, m menu, i system info, s screenshot.
   // UI-state only (they never call haSet/haBoost): u unlock/lock Controls, c show the confirm-off
   // state on the first confirm-off row, b show the boost confirm card, a show/hide the alert banner.
   int sc = Serial.available() ? Serial.read() : -1;
-  if (sc >= '1' && sc <= '3') { menuClose(); page = sc - '1'; dirty = true; }
+  if (sc >= '1' && sc <= '4' && pageEnabled(sc - '1')) { menuClose(); page = sc - '1'; dirty = true; }
   else if (sc == 'r') { uiRotateNext(); dirty = true; }
   else if (sc == 'm') { if (menuIsOpen()) menuClose(); else menuOpen(); dirty = true; }
   else if (sc == 'i') { menuOpen(true); dirty = true; }
@@ -251,7 +300,8 @@ void loop() {
     drawStatus(lt, timeOk);
     if (page == HOME) drawHome(lt, timeOk);
     else if (page == ENERGY) drawEnergy(now);
-    else drawControls();
+    else if (page == CONTROLS) drawControls();
+    else drawLog();
     drawNav();
     drawOverlays(showTank);
   }

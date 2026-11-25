@@ -47,10 +47,10 @@ Tips:
 | `src/settings_check.h` | Includes `panel_settings.h`, or stops the build with a plain-English message. |
 | `src/config.h`, `src/config.cpp` | Reads every setting for the rest of the code (`cfgEntity(EntId)`, `cfgPlugName`, `cfgTileName`, …) from `panel_settings.h`. Rotation and brightness are saved on the board (NVS). |
 | `src/net.*` | Joins the Wi-Fi and rejoins if it drops. |
-| `src/ha.h`, `src/ha.cpp` | Home Assistant client. A background FreeRTOS task on core 0 polls each entity with `GET /api/states/<id>` (fast group every 5 s, slow group every 30 s), with a filtered ArduinoJson parse (state plus a few attributes). Service calls (`switch/turn_on`/`turn_off` via `haSet()`, `hive/boost_heating_*`) each run in their own short task with their own connection, so a slow Bluetooth device (HA answers only when it has, 5–40 s) never blocks other commands or polling; nothing is queued to run later, and an entity with a command in flight is re-read every second. `EntId` lists every entity in order. |
+| `src/ha.h`, `src/ha.cpp` | Home Assistant client. A background FreeRTOS task on core 0 polls each entity with `GET /api/states/<id>` (fast group every 5 s, slow group every 30 s), with a filtered ArduinoJson parse (state plus a few attributes). Service calls (`switch/turn_on`/`turn_off` via `haSet()`, `hive/boost_heating_*`, and the Log page's `script/turn_on`, `input_select/select_option` and `logbook/log` via `haShower()`, `haFlow()`, `haLog()`) each run in their own short task with their own connection, so a slow Bluetooth device (HA answers only when it has, 5–40 s) never blocks other commands or polling; nothing is queued to run later, and an entity with a command in flight is re-read every second. `EntId` lists every entity in order. |
 | `src/main.cpp` | Setup and the main loop: touch handling (swipes, forgiving taps, unlock, confirm, long presses), night dimming, the rate LED, the peak chime and the "appliance stopped" alert. Redraws at most once a second from a snapshot of HA values. |
 | `src/ui.h` | Shared UI state, palette and layout helpers: `EDGE` (side margins), `contentL/R/W/Bottom()`, the tap areas (`titleRect`, `heatingRect`, `tileRect`, `controlsBarRect`, …) and the accidental-touch guard (`UiGuard`: unlock 25 s, confirm-off 3 s, boost confirm 8 s). |
-| `src/ui_pages.cpp` | Draws the status bar, page dots and the three pages, each with a landscape and a portrait layout, plus overlays (toast, alert banner, boost confirm). |
+| `src/ui_pages.cpp` | Draws the status bar, page dots and the four pages (Log only when set up), each with a landscape and a portrait layout, plus overlays (toast, alert banner, boost confirm). |
 | `src/ui_menu.cpp` | The hidden menu (hold the page name): Rotate, Brightness, System info. |
 | `src/board.*` | Display (ST77922 over QSPI), backlight and touch. Rotation is set at run time (`boardSetRotation(0..3)`: 0/2 portrait 320x480, 1/3 landscape 480x320); there is one PSRAM canvas per shape and `boardPresent()` rotates it onto the panel. `UI_W`/`UI_H` give the current size. |
 | `src/touch.*` | Turns raw touches into tap (20–600 ms, moved ≤ 20 px), long press (0.7 s, stayed within 20 px) and swipe left/right. |
@@ -70,8 +70,10 @@ Tips:
   position** (use `#ifndef` with a `""` default so older settings files still build). Only `state` and the attributes listed in the filter in
   `fetch()` are kept; add attributes there if you need them.
 - **Switching things:** the panel may only switch the Controls-page switches (`haSet` refuses anything else), only
-  while the page is unlocked. Keep both guards, and keep sending `turn_on`/`turn_off` (never `toggle`). Never add
-  fridges, freezers or anything that must stay on.
+  while the page is unlocked. Keep both guards, and keep sending `turn_on`/`turn_off` (never `toggle`), in the tile's own domain (`switch`, `light` or `input_boolean`; anything else is refused). Never add
+  fridges, freezers or anything that must stay on. The Log page may only call its own three things (`haShower` runs
+  the two configured scripts, `haFlow` only options from `FLOW_OPTIONS`, `haLog` only `logbook.log`), also only while
+  unlocked (`pageLocked()`).
 - **Text:** fonts contain printable ASCII plus `° · £ → … ↻`. For another character (for example `€`), add it to
   `FULL` in `tools/gen_fonts.py` and run `python3 tools/gen_fonts.py` (needs Pillow). Sizes: `aaR14/17/20`,
   `aaB17/20/24/30`; `aaB36`/`aaB44` have only digits, `- . ° £ k W` (big figures); `aaB80`/`aaB100` only digits,
@@ -98,5 +100,5 @@ python3 tools/raw2png.py shot.png.raw shot.png
 
 Use your board's port: `/dev/cu.usbmodem…` on macOS, `/dev/ttyACM0` on Linux, or `COM5` or similar on Windows
 (where PlatformIO's Python is `%USERPROFILE%\.platformio\penv\Scripts\python.exe`). Running `pio device list`, or
-PlatformIO → Devices in VS Code, shows the port. Keys you can send on the serial port first (they only change what is shown, never switch anything): `1`/`2`/`3`
+PlatformIO → Devices in VS Code, shows the port. Keys you can send on the serial port first (they only change what is shown, never switch anything): `1`/`2`/`3`/`4`
 page, `r` rotate, `m` menu, `i` system info, `u` lock/unlock look, `c` confirm-off look, `b` boost-confirm look, `a` alert-banner look.

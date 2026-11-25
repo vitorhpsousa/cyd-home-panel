@@ -15,8 +15,8 @@ static volatile bool lastOk = false;
 // Service calls run in their own short-lived task each, with their own HTTP connection: HA only
 // answers a Bluetooth relay command when the relay has responded (5-40 s), and that must not hold up
 // other commands or the polling. While a command is in flight its entity is re-read every second.
-enum CmdType { CMD_SWITCH, CMD_BOOST, CMD_BOOST_OFF };
-struct Cmd { CmdType t; int ent; float temp; int minutes; bool on; };
+enum CmdType { CMD_SWITCH, CMD_BOOST, CMD_BOOST_OFF, CMD_SCRIPT, CMD_SELECT, CMD_LOG };
+struct Cmd { CmdType t; int ent; float temp; int minutes; bool on; char text[64]; };
 #define MAX_INFLIGHT 4
 static SemaphoreHandle_t slots;                  // counting semaphore: commands in flight
 static volatile bool inflight[E_COUNT];          // one command per entity at a time
@@ -30,8 +30,19 @@ void haSnapshot(EntVal out[E_COUNT]) {
 bool haOnline() { return lastOk && millis() - lastOkMs < 60000; }
 
 static bool startCmd(const Cmd &c);
+// The service domain for a Controls tile: the part of its entity ID before the dot, if it is one the
+// panel knows how to switch on and off ("" otherwise, and nothing is sent).
+static const char *tileDomain(const char *id) {
+  static const char *const OK[] = {"switch", "light", "input_boolean"};
+  for (const char *d : OK) {
+    size_t n = strlen(d);
+    if (!strncmp(id, d, n) && id[n] == '.') return d;
+  }
+  return "";
+}
 bool haSet(int e, bool on) {
   if (e < S_TILE1 || e > S_TILE8 || !*cfgEntity(e)) return false;   // safety: only the Controls-page switches
+  if (!*tileDomain(cfgEntity(e))) return false;
   return startCmd({CMD_SWITCH, e, 0, 0, on});
 }
 void haBoost(float t, int m) {
@@ -41,6 +52,25 @@ void haBoost(float t, int m) {
 void haBoostOff() {
   if (!HIVE_BOOST || !*cfgEntity(E_CLIMATE)) return;
   startCmd({CMD_BOOST_OFF, E_CLIMATE, 0, 0, false});
+}
+bool haShower(bool start) {
+  const char *script = start ? cfgEntity(S_SHOWER) : cfgShowerEndScript();
+  if (!*cfgEntity(S_SHOWER) || !*script) return false;
+  Cmd c = {CMD_SCRIPT, S_SHOWER, 0, 0, start};
+  strlcpy(c.text, script, sizeof c.text);
+  return startCmd(c);
+}
+bool haFlow(const char *option) {
+  if (!*cfgEntity(E_FLOW) || !cfgFlowOptionValid(option)) return false;   // only the listed options
+  Cmd c = {CMD_SELECT, E_FLOW, 0, 0, true};
+  strlcpy(c.text, option, sizeof c.text);
+  return startCmd(c);
+}
+bool haLog(const char *message) {
+  if (!*message) return false;
+  Cmd c = {CMD_LOG, X_LOG, 0, 0, true};
+  strlcpy(c.text, message, sizeof c.text);
+  return startCmd(c);
 }
 
 // "2026-11-19T13:00:00+00:00" -> UTC epoch
@@ -83,7 +113,7 @@ static bool fetch(int e) {
   filter["state"] = true;
   JsonObject fa = filter["attributes"].to<JsonObject>();
   fa["temperature"] = true; fa["current_temperature"] = true; fa["hvac_action"] = true;
-  fa["preset_mode"] = true; fa["end"] = true;
+  fa["preset_mode"] = true; fa["end"] = true; fa["last_triggered"] = true;
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
   http.end();
@@ -101,6 +131,7 @@ static bool fetch(int e) {
   strlcpy(v.action, a["hvac_action"] | "", sizeof v.action);
   strlcpy(v.preset, a["preset_mode"] | "", sizeof v.preset);
   v.end = parseIso(a["end"] | "");
+  v.since = parseIso(a["last_triggered"] | "");
   v.ok = true;
   xSemaphoreTake(mtx, portMAX_DELAY); g[e] = v; xSemaphoreGive(mtx);
   return true;
@@ -112,16 +143,22 @@ static void cmdTask(void *arg) {
   String path, body;
   if (c.t == CMD_SWITCH) {
     // turn_on/turn_off with the state the user saw, never "toggle": a repeat can't undo the first one
-    path = c.on ? "/api/services/switch/turn_on" : "/api/services/switch/turn_off";
+    path = String("/api/services/") + tileDomain(cfgEntity(c.ent)) + (c.on ? "/turn_on" : "/turn_off");
     body = String("{\"entity_id\":\"") + cfgEntity(c.ent) + "\"}";
   } else if (c.t == CMD_BOOST) {
     char b[200];
     snprintf(b, sizeof b, "{\"entity_id\":\"%s\",\"time_period\":\"%02d:%02d:00\",\"temperature\":%.1f}",
              cfgEntity(E_CLIMATE), c.minutes / 60, c.minutes % 60, c.temp);
     path = "/api/services/hive/boost_heating_on"; body = b;
-  } else {
+  } else if (c.t == CMD_BOOST_OFF) {
     path = "/api/services/hive/boost_heating_off";
     body = String("{\"entity_id\":\"") + cfgEntity(E_CLIMATE) + "\"}";
+  } else {   // Log page: built with ArduinoJson so names with quotes are escaped
+    JsonDocument d;
+    if (c.t == CMD_SCRIPT) { path = "/api/services/script/turn_on"; d["entity_id"] = c.text; }
+    else if (c.t == CMD_SELECT) { path = "/api/services/input_select/select_option"; d["entity_id"] = cfgEntity(E_FLOW); d["option"] = c.text; }
+    else { path = "/api/services/logbook/log"; d["name"] = cfgLogName(); d["message"] = c.text; }
+    serializeJson(d, body);
   }
   {
     WiFiClient cl;

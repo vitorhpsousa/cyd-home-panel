@@ -6,7 +6,15 @@
 #include "config.h"
 
 int page = HOME;
-const char *const PAGE_NAMES[NPAGES] = {"Home", "Energy", "Controls"};
+const char *const PAGE_NAMES[NPAGES] = {"Home", "Energy", "Controls", "Log"};
+bool pageEnabled(int p) { return p >= 0 && p < NPAGES && (p != LOG || logCount() > 0); }
+int pageStep(int p, int dir) {
+  for (int k = 0; k < NPAGES; k++) {
+    p = (p + dir + NPAGES) % NPAGES;
+    if (pageEnabled(p)) return p;
+  }
+  return HOME;
+}
 Tile TILES[NTILES];
 uint32_t pendingUntil[NTILES] = {0};
 
@@ -121,9 +129,11 @@ void drawStatus(const struct tm &lt, bool timeOk) {
 
 void drawNav() {
   const int dy = UI_H - DOTS_H / 2 - 1;
-  for (int i = 0; i < NPAGES; i++) {
-    int cx = UI_W / 2 + (i - (NPAGES - 1) / 2) * 18;   // NPAGES is odd
-    if (i == page) cv->fillCircle(cx, dy, 4, BLUE); else cv->fillCircle(cx, dy, 3, FAINT);
+  int shown[NPAGES], n = 0;
+  for (int i = 0; i < NPAGES; i++) if (pageEnabled(i)) shown[n++] = i;
+  for (int k = 0; k < n; k++) {   // centred, 18 px apart
+    int cx = UI_W / 2 + (2 * k - (n - 1)) * 9;
+    if (shown[k] == page) cv->fillCircle(cx, dy, 4, BLUE); else cv->fillCircle(cx, dy, 3, FAINT);
   }
 }
 
@@ -473,9 +483,124 @@ void drawControls() {
   else drawControlsBar();
 }
 
+// ---- Log ----
+// Shower (runs the shower-pause script, or ends the pause), one button per LOG_BUTTONS item (each tap
+// writes a time-stamped line to HA's logbook) and the flow buttons (FLOW_SELECT). Locked like Controls.
+// Landscape: Shower across the top, the log buttons 3 per row, the flow buttons in the last row;
+// portrait the same with 2 log buttons per row.
+static LogCell LC[1 + 12 + 6];
+static int LN = -1, nShower = 0, nLog = 0, nFlow = 0;
+static uint32_t flashUntil[1 + 12 + 6];
+static void trimCopy(char *dst, size_t n, const char *s, size_t len) {
+  while (len && *s == ' ') { s++; len--; }
+  while (len && s[len - 1] == ' ') len--;
+  if (len >= n) len = n - 1;
+  memcpy(dst, s, len); dst[len] = 0;
+}
+static void buildLog() {
+  if (LN >= 0) return;
+  LN = 0;
+  if (*cfgEntity(S_SHOWER)) { LogCell &c = LC[LN++]; c = {}; c.kind = LK_SHOWER; strlcpy(c.main, "Shower", sizeof c.main); }
+  nShower = LN;
+  for (const char *p = cfgLogButtons(); *p && LN < 1 + 12;) {   // "1 hob;2 hobs/+ oven;..."
+    const char *e = strchr(p, ';');
+    size_t len = e ? (size_t)(e - p) : strlen(p);
+    const char *sl = (const char *)memchr(p, '/', len);
+    LogCell c = {}; c.kind = LK_LOG;
+    trimCopy(c.main, sizeof c.main, p, sl ? (size_t)(sl - p) : len);
+    if (sl) trimCopy(c.sub, sizeof c.sub, sl + 1, len - (sl + 1 - p));
+    snprintf(c.text, sizeof c.text, *c.sub ? "%s %s" : "%s", c.main, c.sub);   // the logged line
+    if (*c.main) LC[LN++] = c;
+    if (!e) break;
+    p = e + 1;
+  }
+  nLog = LN - nShower;
+  if (*cfgEntity(E_FLOW))
+    for (const char *p = cfgFlowOptions(); *p && LN < (int)(sizeof LC / sizeof LC[0]);) {   // "65,70,75"
+      const char *e = strchr(p, ',');
+      size_t len = e ? (size_t)(e - p) : strlen(p);
+      LogCell c = {}; c.kind = LK_FLOW;
+      trimCopy(c.text, sizeof c.text, p, len);
+      snprintf(c.main, sizeof c.main, isdigit((unsigned char)c.text[0]) ? "%s\xC2\xB0" : "%s", c.text);
+      strlcpy(c.sub, "flow", sizeof c.sub);
+      if (*c.text) LC[LN++] = c;
+      if (!e) break;
+      p = e + 1;
+    }
+  nFlow = LN - nShower - nLog;
+}
+int logCount() { buildLog(); return LN; }
+const LogCell &logCell(int i) { buildLog(); return LC[constrain(i, 0, max(LN - 1, 0))]; }
+void logFlash(int i) { if (i >= 0 && i < LN) flashUntil[i] = millis() + 1500; }
+Rect logCellRect(int i) {
+  buildLog();
+  if (i < 0 || i >= LN) return {0, 0, 0, 0};
+  const bool port = boardPortrait();
+  const int cols = port ? 2 : 3, logRows = (nLog + cols - 1) / cols;
+  const int rows = (nShower ? 1 : 0) + logRows + (nFlow ? 1 : 0);
+  const int top = STATUS_H + 4, bottom = contentBottom() - CONTROLS_FOOT_H, gap = 6;
+  const int h = min(port ? 64 : 56, (bottom - top - gap * (rows - 1)) / max(rows, 1));
+  int row, col, ncol;
+  if (i < nShower) { row = 0; col = 0; ncol = 1; }
+  else if (i < nShower + nLog) { int k = i - nShower; row = (nShower ? 1 : 0) + k / cols; col = k % cols; ncol = cols; }
+  else { row = rows - 1; col = i - nShower - nLog; ncol = nFlow; }
+  const int W = safeR() - safeL(), w = (W - gap * (ncol - 1)) / ncol;
+  return {safeL() + col * (w + gap), top + row * (h + gap), w, h};
+}
+
+static void logButton(const Rect &r, const char *main, const char *sub, uint16_t fill, uint16_t fg, uint16_t subCol,
+                      uint16_t outline = 0) {
+  cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, fade(fill));
+  if (outline) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, fade(outline)); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, fade(outline)); }
+  static const AAFont *const F[] = {&aaB20, &aaB17};
+  char m[32]; strlcpy(m, main, sizeof m);
+  const AAFont &f = aaFit(m, r.w - 12, F, 2);
+  fitText(m, sizeof m, f, r.w - 12);
+  if (sub && *sub && r.h >= f.height + 14) {
+    char s[48]; strlcpy(s, sub, sizeof s);
+    fitText(s, sizeof s, aaR14, r.w - 12);
+    const int top = r.y + (r.h - f.height - 15) / 2;
+    aaDrawCentered(cv, r.x + r.w / 2, top, m, f, fade(fg));
+    aaDrawCentered(cv, r.x + r.w / 2, top + f.height - 2, s, aaR14, fade(subCol));
+  } else aaDrawCentered(cv, r.x + r.w / 2, r.y + (r.h - f.height) / 2, m, f, fade(fg));
+}
+
+void drawLog() {
+  buildLog();
+  s_fade = !controlsUnlocked();
+  const uint32_t ms = millis();
+  for (int i = 0; i < LN; i++) {
+    const LogCell &c = LC[i];
+    Rect r = logCellRect(i);
+    if (c.kind == LK_SHOWER) {
+      char sub[48];
+      if (isOn(S_SHOWER)) {   // the pause script is running
+        char hm[8] = "";
+        if (ev[S_SHOWER].since) fmtHm(hm, sizeof hm, ev[S_SHOWER].since + cfgShowerMinutes() * 60);
+        snprintf(sub, sizeof sub, *hm ? "until %s \xC2\xB7 tap to end" : "tap to end", hm);
+        logButton(r, "Heating paused", sub, rgb(90, 45, 12), TXT, TXT, ORANGE);
+      } else {
+        bool off = ev[E_CLIMATE].ok && !strcmp(ev[E_CLIMATE].s, "off");
+        if (off) strlcpy(sub, "heating is off \xC2\xB7 just logs it", sizeof sub);
+        else snprintf(sub, sizeof sub, "pauses the heating %d min", cfgShowerMinutes());
+        logButton(r, c.main, sub, CARD_HI, TXT, DIM);
+      }
+    } else if (c.kind == LK_FLOW) {
+      bool sel = ev[E_FLOW].ok && !strcmp(ev[E_FLOW].s, c.text);
+      logButton(r, c.main, c.sub, sel ? ONFILL : CARD, sel ? BG : TXT, sel ? BG : DIM);
+    } else {
+      bool fl = (int32_t)(flashUntil[i] - ms) > 0;
+      logButton(r, c.main, c.sub, fl ? GREEN : CARD, fl ? BG : TXT, fl ? BG : DIM);
+    }
+  }
+  s_fade = false;
+  if (!LN) aaDrawCentered(cv, UI_W / 2, UI_H / 2 - 12, "Nothing set up", aaR20, DIM);
+  else drawControlsBar();
+}
+
 // ---- banners ----
 // above the page dots, or above the lock bar on the Controls page (kept visible)
-static int bannerY() { return (page == CONTROLS ? controlsBarRect().y : contentBottom()) - 4 - 38; }
+static int bannerY() { return (pageLocked(page) ? controlsBarRect().y : contentBottom()) - 4 - 38; }
 Rect alertBannerRect() { return {10, bannerY(), UI_W - 20, 38}; }
 bool toastShowing() { return millis() < toastUntil; }
 

@@ -22,9 +22,12 @@ struct Rect {
   bool hit(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
 };
 
-enum Page { HOME, ENERGY, CONTROLS, NPAGES };
+enum Page { HOME, ENERGY, CONTROLS, LOG, NPAGES };
 extern int page;
 extern const char *const PAGE_NAMES[NPAGES];
+bool pageEnabled(int p);          // LOG only when something is set up for it
+int pageStep(int p, int dir);     // next (+1) / previous (-1) enabled page, wrapping round
+inline bool pageLocked(int p) { return p == CONTROLS || p == LOG; }   // pages behind the "Tap to unlock" bar
 
 // ---- layout ----
 // Pages change only by swiping. The side margins (EDGE px) stay clear of cards so a swipe is easy to start.
@@ -44,6 +47,14 @@ Rect controlsBarRect();           // lock bar at the bottom of the Controls page
 Rect boostCardRect();             // "Boost heating?" confirm card
 Rect boostButtonRect(bool start); // its [Start boost] / [Cancel] buttons
 Rect alertBannerRect();           // red "appliance stopped" banner: a tap hides it until the alert clears
+
+// ---- Log page: Shower (pauses the heating), one button per LOG_BUTTONS item, the flow buttons ----
+enum LogKind { LK_SHOWER, LK_LOG, LK_FLOW };
+struct LogCell { LogKind kind; char main[24]; char sub[24]; char text[48]; };   // text = logged line / option
+int logCount();
+const LogCell &logCell(int i);
+Rect logCellRect(int i);
+void logFlash(int i);             // show button i as "logged" for a moment
 
 // ---- control tiles ----
 struct Tile { const char *name; int sw; int pw; };
@@ -86,6 +97,7 @@ void drawNav();                   // page dots
 void drawHome(const struct tm &lt, bool timeOk);
 void drawEnergy(time_t now);
 void drawControls();
+void drawLog();
 void drawOverlays(bool tank);     // toast / tank alert banner (tank = show it), boost confirm card
 
 // ---- hidden menu (ui_menu.cpp) ----

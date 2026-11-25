@@ -88,7 +88,7 @@
 #define PLUG10_COST  ""
 
 // ---- Controls page: up to 8 on/off switches ------------------------------------------
-// SWITCH = the switch entity to turn on/off (starts with "switch.")
+// SWITCH = the entity to turn on/off: a "switch.", "light." or "input_boolean." entity
 // PLUG   = which plug number above shows its watts on the button (0 = none)
 // The Controls page opens locked: tap "Unlock" at the bottom first (it locks again by itself).
 // Optional: add  #define TILE1_CONFIRM_OFF 1  (any number 1-8) for something that must not be
@@ -128,3 +128,27 @@
 #define ALERT_WATTS   50
 #define ALERT_MINUTES 10
 #define ALERT_TEXT    "Dehumidifier tank full?"
+
+// ---- Optional Log page ----------------------------------------------------------------
+// A fourth page (swipe past Controls) with buttons that note what is going on in the house,
+// so energy and heating data can be explained later. It opens locked like Controls.
+// It only appears when at least one of SHOWER_SCRIPT, FLOW_SELECT or LOG_BUTTONS is set.
+//
+// SHOWER_SCRIPT     = an HA script that pauses the heating while the hot water heats, e.g.
+//                     "script.shower_pause" (see docs/setup-guide.md). The button shows
+//                     "Heating paused" while the script runs; tapping it again runs SHOWER_END_SCRIPT.
+// SHOWER_END_SCRIPT = an HA script that ends the pause early.
+// SHOWER_MINUTES    = how long the script pauses for (only used for the "until" time shown).
+// FLOW_SELECT       = an input_select that records a setting you change by hand (for example the
+//                     boiler's flow temperature dial), and FLOW_OPTIONS the buttons to show for it
+//                     (comma separated, each must be one of the input_select's options).
+// LOG_BUTTONS       = one button per item, separated by ";". Each tap adds a line to HA's logbook
+//                     under LOG_NAME, e.g. "Oven". A "/" starts the small second line on the
+//                     button: "Sink/hot water" shows "Sink" over "hot water" and logs "Sink hot water".
+#define SHOWER_SCRIPT     ""
+#define SHOWER_END_SCRIPT ""
+#define SHOWER_MINUTES    10
+#define FLOW_SELECT       ""
+#define FLOW_OPTIONS      "65,70,75"
+#define LOG_BUTTONS       ""     // e.g. "1 hob;2 hobs;2 hobs/+ oven;Oven;Kitchen/other;Sink/hot water"
+#define LOG_NAME          "House log"
