@@ -27,11 +27,9 @@ extern int page;
 extern const char *const PAGE_NAMES[NPAGES];
 
 // ---- layout ----
-// Tapping the narrow strip at the left/right edge goes to the previous/next page. The strips are
-// invisible and cards run across them; a tap there always changes page (it is checked before tiles),
-// so an edge tap can never switch a Controls tile. Long presses are not affected by the strips.
+// Pages change only by swiping. The side margins (EDGE px) stay clear of cards so a swipe is easy to start.
 // The status bar is on top, the page dots at the bottom.
-constexpr int EDGE = 44;          // width of each side tap strip
+constexpr int EDGE = 44;          // side margin kept clear of cards (easy to grab for a swipe)
 constexpr int STATUS_H = 30;      // status bar (0..27 text, 27..28 rate-coloured rule)
 constexpr int DOTS_H = 20;        // page dots at the bottom
 inline int contentL() { return 10; }
@@ -42,9 +40,10 @@ constexpr int CONTROLS_FOOT_H = 52;   // under the Controls rows: the lock bar (
 Rect titleRect();                 // page name in the status bar: long press opens the menu
 Rect heatingRect();               // Home heating card: long press = Hive boost
 Rect tileRect(int i);             // Controls row for switch i (0..NTILES-1); w = 0 if unused
-Rect controlsBarRect();           // lock bar at the bottom of the Controls page (clear of the edge strips)
+Rect controlsBarRect();           // lock bar at the bottom of the Controls page (clear of the side margins)
 Rect boostCardRect();             // "Boost heating?" confirm card
 Rect boostButtonRect(bool start); // its [Start boost] / [Cancel] buttons
+Rect alertBannerRect();           // red "appliance stopped" banner: a tap hides it until the alert clears
 
 // ---- control tiles ----
 struct Tile { const char *name; int sw; int pw; };
@@ -77,6 +76,7 @@ uint16_t rateCol(float r);
 const char *rateName(float r);
 void fmtPower(char *b, size_t n, float w);
 void showToast(const char *s);
+bool toastShowing();              // a toast is up (it covers the alert banner)
 // Cuts s (in place) with "…" until it fits maxW in font f.
 void fitText(char *s, size_t n, const AAFont &f, int maxW);
 
@@ -86,7 +86,7 @@ void drawNav();                   // page dots
 void drawHome(const struct tm &lt, bool timeOk);
 void drawEnergy(time_t now);
 void drawControls();
-void drawOverlays(bool tank);     // toast / tank alert banner, boost confirm card
+void drawOverlays(bool tank);     // toast / tank alert banner (tank = show it), boost confirm card
 
 // ---- hidden menu (ui_menu.cpp) ----
 bool menuIsOpen();

@@ -48,8 +48,8 @@ Tips:
 | `src/config.h`, `src/config.cpp` | Reads every setting for the rest of the code (`cfgEntity(EntId)`, `cfgPlugName`, `cfgTileName`, …) from `panel_settings.h`. Rotation and brightness are saved on the board (NVS). |
 | `src/net.*` | Joins the Wi-Fi and rejoins if it drops. |
 | `src/ha.h`, `src/ha.cpp` | Home Assistant client. A background FreeRTOS task on core 0 polls each entity with `GET /api/states/<id>` (fast group every 5 s, slow group every 30 s), with a filtered ArduinoJson parse (state plus a few attributes). Service calls (`switch/turn_on`/`turn_off` via `haSet()`, `hive/boost_heating_*`) each run in their own short task with their own connection, so a slow Bluetooth device (HA answers only when it has, 5–40 s) never blocks other commands or polling; nothing is queued to run later, and an entity with a command in flight is re-read every second. `EntId` lists every entity in order. |
-| `src/main.cpp` | Setup and the main loop: touch handling (edge taps, swipes, unlock, confirm, long presses), night dimming, the rate LED, the peak chime and the "appliance stopped" alert. Redraws at most once a second from a snapshot of HA values. |
-| `src/ui.h` | Shared UI state, palette and layout helpers: `EDGE` (side tap strips), `contentL/R/W/Bottom()`, the tap areas (`titleRect`, `heatingRect`, `tileRect`, `controlsBarRect`, …) and the accidental-touch guard (`UiGuard`: unlock 25 s, confirm-off 3 s, boost confirm 8 s). |
+| `src/main.cpp` | Setup and the main loop: touch handling (swipes, forgiving taps, unlock, confirm, long presses), night dimming, the rate LED, the peak chime and the "appliance stopped" alert. Redraws at most once a second from a snapshot of HA values. |
+| `src/ui.h` | Shared UI state, palette and layout helpers: `EDGE` (side margins), `contentL/R/W/Bottom()`, the tap areas (`titleRect`, `heatingRect`, `tileRect`, `controlsBarRect`, …) and the accidental-touch guard (`UiGuard`: unlock 25 s, confirm-off 3 s, boost confirm 8 s). |
 | `src/ui_pages.cpp` | Draws the status bar, page dots and the three pages, each with a landscape and a portrait layout, plus overlays (toast, alert banner, boost confirm). |
 | `src/ui_menu.cpp` | The hidden menu (hold the page name): Rotate, Brightness, System info. |
 | `src/board.*` | Display (ST77922 over QSPI), backlight and touch. Rotation is set at run time (`boardSetRotation(0..3)`: 0/2 portrait 320x480, 1/3 landscape 480x320); there is one PSRAM canvas per shape and `boardPresent()` rotates it onto the panel. `UI_W`/`UI_H` give the current size. |
@@ -79,7 +79,7 @@ Tips:
   **top** of the text and returns its width.
 - **Screen layout:** every page has a landscape (480x320) and a portrait (320x480) version; never hard-code sizes, use
   `UI_W`/`UI_H` and the helpers in `ui.h`. Status bar at the top (`STATUS_H`), page dots at the bottom (`DOTS_H`).
-  Nothing tappable may sit in the `EDGE` strips at the left and right: taps there change page. Colours are RGB565
+  Keep cards out of the `EDGE` margins at the left and right (room to start a swipe). Pages change only by swiping; taps on the Controls page go to the nearest row or bar within `TAP_SLOP` px. Colours are RGB565
   via `rgb(r,g,b)`; reuse the palette in `ui.h`. Check all four rotations with screenshots.
 - **Memory:** heap is fine (about 250 KB free). Don't request the HA websocket or `/api/states` (all entities); some
   Octopus sensors carry several KB of attributes.
@@ -99,4 +99,4 @@ python3 tools/raw2png.py shot.png.raw shot.png
 Use your board's port: `/dev/cu.usbmodem…` on macOS, `/dev/ttyACM0` on Linux, or `COM5` or similar on Windows
 (where PlatformIO's Python is `%USERPROFILE%\.platformio\penv\Scripts\python.exe`). Running `pio device list`, or
 PlatformIO → Devices in VS Code, shows the port. Keys you can send on the serial port first (they only change what is shown, never switch anything): `1`/`2`/`3`
-page, `r` rotate, `m` menu, `i` system info, `u` lock/unlock look, `c` confirm-off look, `b` boost-confirm look.
+page, `r` rotate, `m` menu, `i` system info, `u` lock/unlock look, `c` confirm-off look, `b` boost-confirm look, `a` alert-banner look.

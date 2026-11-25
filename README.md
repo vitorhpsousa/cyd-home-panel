@@ -17,7 +17,7 @@ ready-made prompts and everything the assistant needs to know about the code.
 
 ## What it shows
 
-**Changing page:** tap near the left or right edge of the screen, or swipe. The dots at the bottom show which page
+**Changing page:** swipe left or right. The dots at the bottom show which page
 you're on.
 
 - **Home:** a big clock, the date, inside and outside temperature, the weather, and the heating. In portrait it also
@@ -25,7 +25,8 @@ you're on.
   With Hive heating, **hold your finger on the Heating card** to boost the heating for 30 minutes (to the room
   temperature +1 °C, between 20 and 25 °C). It asks first: tap **Start** to confirm. Hold it again to stop the boost.
 - **Energy:** how much power the whole house is using right now (split into "plugs" and "everything else"), today's
-  cost and kWh, the current electricity price and when the next price starts, and your top 8 smart plugs by power.
+  cost and kWh, the current electricity price and when the next price starts, every smart plug that is using power (the rows shrink to fit them all), plus "Other" for the rest of the house.
+  The alert plug is always listed, even at 0 W.
 - **Controls:** up to 8 on/off switches for lights and plugs. The page opens **locked** so a stray touch can't
   switch anything: tap **Tap to unlock** at the bottom first. It locks again by itself 25 seconds after your last tap.
   Anything you choose (for example a desk with a computer) can also need a second tap to turn off.
@@ -46,7 +47,8 @@ Extras:
 - **"HA offline" warning:** shown in red if Home Assistant stops answering for a minute.
 - **Night mode:** the screen dims at night (23:00–07:00 by default). A touch wakes it for 30 seconds.
 - **Optional "appliance stopped" alert:** a red banner and a chime when an appliance that should be running uses
-  almost no power, for example a dehumidifier with a full tank.
+  almost no power, for example a dehumidifier with a full tank. Tap the banner to hide it; it comes back the next time
+  the appliance stops.
 
 ## What you need
 

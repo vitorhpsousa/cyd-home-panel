@@ -150,7 +150,7 @@ How the main parts work:
   - `NAME` is the label on the screen; keep it short.
   - `POWER` is the plug's watts sensor.
   - `COST` is optional (an Octopus "cost tracker" sensor for that plug).
-  - The Energy page shows the 8 plugs using the most power at that moment.
+  - The Energy page lists every plug using power at that moment (most first), plus the alert plug even when idle.
 - **Switches (`TILE1` to `TILE8`):**
   - `NAME` is the label on the Controls page.
   - `SWITCH` is what it turns on and off.
@@ -161,7 +161,8 @@ How the main parts work:
 - **Prices:** `RATE_CHEAP` and `RATE_PEAK` are in pounds per kWh. The defaults suit Octopus Cosy.
 - **`HIVE_BOOST`:** set it to `1` if you have Hive heating (holding the Heating card then boosts it). Otherwise set `0`.
 - **Alert (optional):** a red banner when `ALERT_SWITCH` is on but its plug uses less than `ALERT_WATTS` for
-  `ALERT_MINUTES`. `ALERT_PLUG` is the number (1–10) of the plug above that measures it.
+  `ALERT_MINUTES`. `ALERT_PLUG` is the number (1–10) of the plug above that measures it. Tap the banner to hide it
+  until the appliance runs again.
 
 Your settings stay on your computer: `panel_settings.h` is never uploaded to GitHub.
 
@@ -201,12 +202,12 @@ If it says **"Failed to connect"**:
 3. Lines such as `HA GET sensor.xxx -> 404` mean that entity ID is wrong. Check its spelling in `panel_settings.h`,
    then upload again.
 
-✅ **Check:** `wifi 3` and `ha 1`. The Energy and Controls pages show your figures (tap the right edge of the
-screen, or swipe, to change page).
+✅ **Check:** `wifi 3` and `ha 1`. The Energy and Controls pages show your figures (swipe left
+or right to change page).
 
 **Using it:**
 
-- **Change page:** tap near the left or right edge, or swipe.
+- **Change page:** swipe left or right.
 - **Controls:** tap **Tap to unlock** at the bottom, then tap a switch. It locks again by itself after 25 seconds.
 - **Hidden menu:** hold the page name (top left) for about a second. Use it to **rotate** the screen to fit how you
   mount it, change the **brightness**, or see **system info**. These are saved on the board.

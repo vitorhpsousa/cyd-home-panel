@@ -1,5 +1,5 @@
 // The three pages, the status bar, side navigation and banners. Landscape (480x320) and portrait
-// (320x480) have their own layouts; both keep cards out of the side tap strips (EDGE px wide).
+// (320x480) have their own layouts; both keep cards out of the side margins (EDGE px wide).
 #include "ui.h"
 #include <WiFi.h>
 #include "settings_check.h"
@@ -73,8 +73,7 @@ Rect heatingRect() { return homeCard(2); }
 
 // Controls: one compact row per switch that has a name, packed without gaps. Portrait = one column
 // of up to 8 rows; landscape = 2 columns x 4 rows (filled top to bottom, then the right column).
-// Rows, the lock bar and the boost card all stay clear of the edge strips, so an edge tap can only
-// ever change page.
+// Rows, the lock bar and the boost card all stay clear of the side margins, so a swipe can start there.
 static int tileCount() { int n = 0; for (int i = 0; i < NTILES; i++) if (*TILES[i].name) n++; return n; }
 static int safeL() { return EDGE + 4; }
 static int safeR() { return UI_W - EDGE - 4; }
@@ -269,36 +268,61 @@ static int drawRateCard(int x, int y, int w, time_t now) {
   return y + h;
 }
 
-static void drawPlugs(int top, int bottom, int cols, int rowsPerCol, int rowH) {
+// Every plug in use (1 W or more), the alert plug even when idle (so you can see it stopped), and "Other".
+// Rows shrink (down to 19 px, small font below 22 px) until every entry fits; a single column that still
+// can't fit them all becomes two. Only if even that is not enough are the smallest users left off the end.
+static void drawPlugs(int top, int bottom, int cols, int rowH) {
   char b[24];
-  struct P { const char *n; int pw; int cost; } ps[NPLUGS];
+  // each plug, plus "Other": the rest of the house (live use minus the plugs, today's cost minus the plug costs)
+  struct P { const char *n; float w; float c; } ps[NPLUGS + 1];
   int N = 0;
-  for (int i = 0; i < NPLUGS; i++)
-    if (*cfgPlugName(i)) ps[N++] = {cfgPlugName(i), P_PLUG1 + i, *haEntityId(C_PLUG1 + i) ? C_PLUG1 + i : -1};
+  float plugW = 0, plugC = 0;
+  const int alertPlug = *haEntityId(S_ALERT) ? cfgAlertPlug() - 1 : -1;
+  for (int i = 0; i < NPLUGS; i++) {
+    if (!*cfgPlugName(i)) continue;
+    float w = num(P_PLUG1 + i), c = *haEntityId(C_PLUG1 + i) ? num(C_PLUG1 + i) : NAN;
+    if (!isnan(w)) plugW += w;
+    if (!isnan(c)) plugC += c;
+    if (i != alertPlug && (isnan(w) || w < 1)) continue;   // idle or offline plugs are left out of the list
+    ps[N++] = {cfgPlugName(i), w, c};
+  }
+  float dem = num(E_DEMAND), cost = num(E_COST);
+  if (!isnan(dem) || !isnan(cost))
+    ps[N++] = {"Other", isnan(dem) ? NAN : max(0.0f, dem - plugW), isnan(cost) ? NAN : max(0.0f, cost - plugC)};
   for (int i = 1; i < N; i++)   // sort by watts, highest first
     for (int j = i; j > 0; j--) {
-      float a = num(ps[j].pw), bb = num(ps[j - 1].pw);
-      if (isnan(a)) a = -1;
-      if (isnan(bb)) bb = -1;
+      float a = isnan(ps[j].w) ? -1 : ps[j].w, bb = isnan(ps[j - 1].w) ? -1 : ps[j - 1].w;
       if (a > bb) { P t = ps[j]; ps[j] = ps[j - 1]; ps[j - 1] = t; } else break;
     }
-  float mx = N ? max(1.0f, num(ps[0].pw)) : 1.0f;
+  float mx = N && !isnan(ps[0].w) ? max(1.0f, ps[0].w) : 1.0f;
+  constexpr int MIN_ROW = 19;
+  const int avail = bottom + 2 - top;
+  if (cols == 1 && N * MIN_ROW > avail) cols = 2;
+  const int need = (N + cols - 1) / cols;   // rows per column to show every entry
+  if (need * rowH > avail) rowH = max(MIN_ROW, avail / max(need, 1));
+  const int rowsPerCol = min(need, avail / rowH);
+  const bool small = rowH < 22;
+  const AAFont &nameF = small ? aaR14 : aaR17, &wattF = small ? aaR14 : aaB17;
   const int gap = 8, cw = (contentW() - gap * (cols - 1)) / cols;
   for (int i = 0; i < min(N, cols * rowsPerCol); i++) {
     int col = i / rowsPerCol, row = i % rowsPerCol;
     int x = contentL() + col * (cw + gap), y = top + row * rowH, w = cw;
-    if (y + rowH > bottom + 2) break;
-    float wv = num(ps[i].pw);
+    float wv = ps[i].w;
+    const bool idle = isnan(wv) || wv < 1;
     fmtPower(b, sizeof b, wv);
-    int left = x + w - 4 - aaDrawRight(cv, x + w - 4, y, b, aaB17, TXT);   // left edge of the watts
-    float c = ps[i].cost >= 0 ? num(ps[i].cost) : NAN;
-    if (!isnan(c)) { snprintf(b, sizeof b, "\xC2\xA3%.2f", c); left -= 8 + aaDrawRight(cv, left - 8, y + 2, b, aaR14, DIM); }
+    int left = x + w - 4 - aaDrawRight(cv, x + w - 4, y, b, wattF, idle ? DIM : TXT);   // left edge of the watts
+    float c = ps[i].c;
+    if (!isnan(c)) {   // the cost only if the name still gets room
+      snprintf(b, sizeof b, "\xC2\xA3%.2f", c);
+      int cwid = aaMeasure(aaR14, b);
+      if (left - 8 - cwid - 6 - (x + 4) >= 72) left -= 8 + aaDrawRight(cv, left - 8, small ? y : y + 2, b, aaR14, DIM);
+    }
     // the name gets what is left; long names are cut short with "…"
     char nm[40]; strlcpy(nm, ps[i].n, sizeof nm);
-    fitText(nm, sizeof nm, aaR17, left - 6 - (x + 4));
-    aaDraw(cv, x + 4, y, nm, aaR17, TXT);
+    fitText(nm, sizeof nm, nameF, left - 6 - (x + 4));
+    aaDraw(cv, x + 4, y, nm, nameF, idle ? DIM : TXT);
     int bw = isnan(wv) ? 0 : (int)((w - 8) * min(1.0f, wv / mx));
-    const int by = y + min(rowH - 2, 21);   // just under the text
+    const int by = y + min(rowH - 2, small ? 17 : 21);   // just under the text
     cv->fillRect(x + 4, by, w - 8, 2, CARD);
     if (bw > 0) cv->fillRect(x + 4, by, bw, 2, BLUE);
   }
@@ -341,9 +365,9 @@ void drawEnergy(time_t now) {
   if (!isnan(kwh)) { snprintf(b, sizeof b, "%.1f kWh", kwh); aaDraw(cv, rt.x + 12, rt.y + sy, b, aaR14, DIM); }
 
   int y = drawRateCard(L, rt.y + rt.h + 6, W, now) + 8;
-  // plugs: top 8 by watts; 2 columns x 4 rows in landscape, one column in portrait
-  if (port) drawPlugs(y, contentBottom() - 2, 1, 8, 22);
-  else drawPlugs(y, contentBottom() - 2, 2, 4, 25);
+  // plugs in use, by watts: 2 columns in landscape, one column in portrait (two if they don't fit)
+  if (port) drawPlugs(y, contentBottom() - 2, 1, 22);
+  else drawPlugs(y, contentBottom() - 2, 2, 25);
 }
 
 // ---- Controls ----
@@ -423,7 +447,7 @@ void drawControls() {
     bool confirm = confirmLive && guard.confirmRow == i;
     cv->fillRoundRect(r.x, r.y, r.w, r.h, 10, confirm ? rgb(120, 28, 28) : fade(on ? CARD_HI : CARD));
     if (pending) { cv->drawRoundRect(r.x, r.y, r.w, r.h, 10, fade(TXT)); cv->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 9, fade(TXT)); }
-    const int sx = min(r.x + r.w - 8 - 52, UI_W - EDGE - 6 - 52);   // never inside the right edge strip
+    const int sx = min(r.x + r.w - 8 - 52, UI_W - EDGE - 6 - 52);   // never inside the right margin
     toggleSwitch(sx, r.y + (r.h - 28) / 2, on, known, pending);
     // name, with the watts / status line under it
     const int nx = r.x + 10, room = sx - 8 - nx;
@@ -450,14 +474,27 @@ void drawControls() {
 }
 
 // ---- banners ----
-static void drawBanner(int y, const char *s, uint16_t col) {
+// above the page dots, or above the lock bar on the Controls page (kept visible)
+static int bannerY() { return (page == CONTROLS ? controlsBarRect().y : contentBottom()) - 4 - 38; }
+Rect alertBannerRect() { return {10, bannerY(), UI_W - 20, 38}; }
+bool toastShowing() { return millis() < toastUntil; }
+
+// closable = draw an "x" at the right end (the alert banner hides when tapped)
+static void drawBanner(int y, const char *s, uint16_t col, bool closable = false) {
   static const AAFont *const F[] = {&aaB20, &aaB17, &aaR14};
-  const int x = 10, w = UI_W - 20;
+  const int x = 10, w = UI_W - 20, xw = closable ? 36 : 0;   // room kept for the "x"
   char t[64]; strlcpy(t, s, sizeof t);
-  const AAFont &f = aaFit(t, w - 20, F, 3);
-  fitText(t, sizeof t, f, w - 20);
+  const AAFont &f = aaFit(t, w - 20 - 2 * xw, F, 3);
+  fitText(t, sizeof t, f, w - 20 - 2 * xw);
   cv->fillRoundRect(x, y, w, 38, 10, col);
   aaDrawCentered(cv, UI_W / 2, y + (38 - f.height) / 2, t, f, TXT);
+  if (closable) {
+    const int cx = x + w - 20, cy = y + 19, r = 6;
+    for (int d = -1; d <= 1; d++) {   // 3 px thick
+      cv->drawLine(cx - r + d, cy - r, cx + r + d, cy + r, TXT);
+      cv->drawLine(cx - r + d, cy + r, cx + r + d, cy - r, TXT);
+    }
+  }
 }
 
 static void drawBoostAsk() {
@@ -479,8 +516,6 @@ static void drawBoostAsk() {
 
 void drawOverlays(bool tank) {
   if (guard.boostAsk) drawBoostAsk();
-  int bottom = contentBottom() - 4;
-  if (page == CONTROLS) bottom = controlsBarRect().y - 4;   // keep the lock bar visible
-  if (millis() < toastUntil) drawBanner(bottom - 38, toast, CARD_HI);
-  else if (tank) drawBanner(bottom - 38, ALERT_TEXT, RED);
+  if (toastShowing()) drawBanner(bannerY(), toast, CARD_HI);
+  else if (tank) drawBanner(bannerY(), ALERT_TEXT, RED, true);
 }

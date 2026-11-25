@@ -1,5 +1,5 @@
-// CYD home panel: 3 pages (Home, Energy, Controls) fed by Home Assistant. Tap the left/right edge or
-// swipe to change page; hold the page name for the hidden menu. Drawing lives in ui_pages.cpp / ui_menu.cpp.
+// CYD home panel: 3 pages (Home, Energy, Controls) fed by Home Assistant. Swipe left/right to change
+// page; hold the page name for the hidden menu. Drawing lives in ui_pages.cpp / ui_menu.cpp.
 #include <Arduino.h>
 #include <WiFi.h>
 #include <time.h>
@@ -33,6 +33,9 @@ void uiApplyBacklight() { boardSetBacklight(dimmed ? BL_NIGHT : cfgBrightness())
 // ---- alerts ----
 static uint32_t dehumLowSince = 0;
 static bool tankAlerted = false;
+static bool tankDismissed = false;   // banner tapped away: hidden until the alert clears, then it re-arms
+static bool tankBannerUp = false;    // the banner was on screen in the last frame (taps check this)
+static bool tankLook = false;        // serial 'a': show the banner for screenshots (UI only)
 static bool tankFull() {
   const int pw = PLUG_ENT(cfgAlertPlug());
   if (!isOn(S_ALERT) || isnan(num(pw))) { dehumLowSince = 0; return false; }
@@ -78,6 +81,14 @@ static void boostAsk(int fingerX, uint32_t ms) {
 }
 
 // ---- touch ----
+// distance in px from (x, y) to the nearest point of r (0 when inside)
+static int rectDist(const Rect &r, int x, int y) {
+  int dx = x < r.x ? r.x - x : (x >= r.x + r.w ? x - (r.x + r.w - 1) : 0);
+  int dy = y < r.y ? r.y - y : (y >= r.y + r.h ? y - (r.y + r.h - 1) : 0);
+  return max(dx, dy);
+}
+static constexpr int TAP_SLOP = 24;
+
 static void onTouch(const TouchEvent &te, uint32_t ms) {
   if (menuIsOpen()) {
     menuTouched();
@@ -94,23 +105,31 @@ static void onTouch(const TouchEvent &te, uint32_t ms) {
     }
     return;
   }
+  if (te.type == TouchEvent::TAP && tankBannerUp && rectDist(alertBannerRect(), te.x, te.y) <= 8) {
+    tankDismissed = true;   // the tap only hides the banner; it never reaches a row underneath
+    tankLook = false;
+    audioBeep(1000, 25, 20);
+    return;
+  }
   if (te.type == TouchEvent::LONG && titleRect().hit(te.x, te.y)) {
     menuOpen();
     lockControls();
     audioBeep(900, 60, 30);
-  } else if (te.type == TouchEvent::SWIPE_LEFT || (te.type == TouchEvent::TAP && te.x >= UI_W - EDGE)) {
+  } else if (te.type == TouchEvent::SWIPE_LEFT) {
     page = (page + 1) % NPAGES;
-  } else if (te.type == TouchEvent::SWIPE_RIGHT || (te.type == TouchEvent::TAP && te.x < EDGE)) {
+  } else if (te.type == TouchEvent::SWIPE_RIGHT) {
     page = (page + NPAGES - 1) % NPAGES;
   } else if (te.type == TouchEvent::TAP && page == CONTROLS) {
-    // edge taps were handled above, so they never reach a row or the bar
-    if (controlsBarRect().hit(te.x, te.y)) {
+    // forgiving: a tap goes to the nearest row or the bar, if it is within TAP_SLOP px of it
+    int best = -2, bestD = TAP_SLOP + 1;
+    int d = rectDist(controlsBarRect(), te.x, te.y);
+    if (d < bestD) { bestD = d; best = -1; }
+    for (int i = 0; i < NTILES; i++)
+      if (*TILES[i].name && (d = rectDist(tileRect(i), te.x, te.y)) < bestD) { bestD = d; best = i; }
+    if (best == -1) {
       guard.unlockedUntil = ms + UNLOCK_MS;   // the bar only unlocks (a double tap must not re-lock); it locks by itself
       audioBeep(1000, 25, 20);
-    } else {
-      for (int i = 0; i < NTILES; i++)
-        if (*TILES[i].name && tileRect(i).hit(te.x, te.y)) controlsRowTapped(i, ms);
-    }
+    } else if (best >= 0) controlsRowTapped(best, ms);
   } else if (te.type == TouchEvent::LONG && HIVE_BOOST && page == HOME && heatingRect().hit(te.x, te.y)) {
     if (!strcmp(ev[E_CLIMATE].preset, "boost")) { haBoostOff(); showToast("Stopping boost"); }   // stopping stays one step
     else boostAsk(te.x, ms);
@@ -184,7 +203,7 @@ void loop() {
 
   // serial test helpers: 1/2/3 page, r rotate, m menu, i system info, s screenshot.
   // UI-state only (they never call haSet/haBoost): u unlock/lock Controls, c show the confirm-off
-  // state on the first confirm-off row, b show the boost confirm card.
+  // state on the first confirm-off row, b show the boost confirm card, a show/hide the alert banner.
   int sc = Serial.available() ? Serial.read() : -1;
   if (sc >= '1' && sc <= '3') { menuClose(); page = sc - '1'; dirty = true; }
   else if (sc == 'r') { uiRotateNext(); dirty = true; }
@@ -197,6 +216,7 @@ void loop() {
     dirty = true;
   }
   else if (sc == 'b') { boostAsk(UI_W - 1, ms); dirty = true; }
+  else if (sc == 'a') { tankLook = !tankLook; dirty = true; }
   if (sc == 's') dirty = true;   // draw a fresh frame, then dump it below
 
   if (!dirty && ms - lastDraw < 1000) { delay(5); return; }
@@ -221,7 +241,9 @@ void loop() {
 
   bool tank = tankFull();
   if (tank && !tankAlerted) { tankAlerted = true; if (!night) audioAlert(APPLIANCE_ALERT); }
-  if (!tank) tankAlerted = false;
+  if (!tank) { tankAlerted = false; tankDismissed = false; }
+  const bool showTank = (tank && !tankDismissed) || tankLook;
+  tankBannerUp = showTank && !toastShowing() && !menuIsOpen();
 
   if (menuIsOpen()) menuDraw();
   else {
@@ -231,7 +253,7 @@ void loop() {
     else if (page == ENERGY) drawEnergy(now);
     else drawControls();
     drawNav();
-    drawOverlays(tank);
+    drawOverlays(showTank);
   }
   boardPresent();
 
